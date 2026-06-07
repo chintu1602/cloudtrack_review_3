@@ -33,7 +33,10 @@ A Resource Group is a container that holds all related Azure resources.
 
 ---
 
-## Step 2: Create Azure Key Vault
+## Step 2: Create Azure Key Vault *(Optional)*
+
+> [!NOTE]
+> **Key Vault is optional.** It is the recommended way to store secrets in production, but for development or simpler setups you can skip this step entirely and paste your secrets directly into App Service / Function App **Environment Variables** (configured in Steps 8 and 9). Every subsequent "Store in Key Vault" section includes an **"Alternative (Without Key Vault)"** note.
 
 Key Vault securely stores all secrets (API keys, connection strings, passwords).
 
@@ -97,7 +100,7 @@ Azure Blob Storage holds uploaded medical documents.
 10. Click **"Show"** next to Key 1's Connection string
 11. Click the **copy icon** — save this for later
 
-### Store in Key Vault
+### Store in Key Vault *(Optional)*
 
 12. Go back to your Key Vault (`kv-nutriai-prod`)
 13. Left menu → **"Objects"** → **"Secrets"** → **"+ Generate/Import"**
@@ -106,6 +109,9 @@ Azure Blob Storage holds uploaded medical documents.
     | Name | `storage-connection-string` |
     | Secret value | *Paste the connection string you copied* |
 14. Click **"Create"**
+
+> [!TIP]
+> **Alternative (Without Key Vault):** Simply save the connection string somewhere safe (e.g., a text file on your machine). You will paste it directly into the App Service **Environment Variables** as `AZURE_STORAGE_CONNECTION_STRING` in **Step 8**.
 
 ---
 
@@ -151,7 +157,7 @@ Your database URL is:
 postgresql://nutriai_admin:<YOUR_PASSWORD>@psql-nutriai-prod.postgres.database.azure.com:5432/nutriai?sslmode=require
 ```
 
-### Store in Key Vault
+### Store in Key Vault *(Optional)*
 
 10. Go to Key Vault → **"Secrets"** → **"+ Generate/Import"**
     | Field | Value |
@@ -159,6 +165,9 @@ postgresql://nutriai_admin:<YOUR_PASSWORD>@psql-nutriai-prod.postgres.database.a
     | Name | `database-url` |
     | Secret value | *Paste the connection string above (with your actual password)* |
 11. Click **"Create"**
+
+> [!TIP]
+> **Alternative (Without Key Vault):** Save the database connection string somewhere safe. You will paste it directly into App Service **Environment Variables** as `DATABASE_URL` in **Step 8**.
 
 ---
 
@@ -198,7 +207,7 @@ Azure OpenAI powers the AI diet plan generation.
    - **Endpoint** (e.g., `https://oai-nutriai-prod.openai.azure.com/`)
    - **Key 1** — save both for later
 
-### Store in Key Vault
+### Store in Key Vault *(Optional)*
 
 10. Go to Key Vault → **"Secrets"** → **"+ Generate/Import"**
     | Field | Value |
@@ -206,6 +215,9 @@ Azure OpenAI powers the AI diet plan generation.
     | Name | `openai-key` |
     | Secret value | *Paste Key 1* |
 11. Click **"Create"**
+
+> [!TIP]
+> **Alternative (Without Key Vault):** Save the Endpoint and Key 1 somewhere safe. You will paste them directly into App Service **Environment Variables** as `AZURE_OPENAI_ENDPOINT` and `AZURE_OPENAI_KEY` in **Step 8**.
 
 ---
 
@@ -232,7 +244,7 @@ Document Intelligence handles OCR (text extraction) from medical documents.
    - **Endpoint** (e.g., `https://di-nutriai-prod.cognitiveservices.azure.com/`)
    - **Key 1**
 
-### Store in Key Vault
+### Store in Key Vault *(Optional)*
 
 7. Go to Key Vault → **"Secrets"** → **"+ Generate/Import"**
    | Field | Value |
@@ -240,6 +252,9 @@ Document Intelligence handles OCR (text extraction) from medical documents.
    | Name | `doc-intelligence-key` |
    | Secret value | *Paste Key 1* |
 8. Click **"Create"**
+
+> [!TIP]
+> **Alternative (Without Key Vault):** Save the Endpoint and Key 1 somewhere safe. You will paste them directly into App Service **Environment Variables** as `AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT` and `AZURE_DOCUMENT_INTELLIGENCE_KEY` in **Step 8**.
 
 ---
 
@@ -351,6 +366,9 @@ App Service hosts the web application.
 
 11. Click **"Apply"** at the bottom → **"Confirm"**
 
+> [!NOTE]
+> **If you skipped Key Vault (Step 2):** Remove the `AZURE_KEYVAULT_URL` row from the table above — you don't need it. All your secrets are already stored directly in these environment variables. The remaining variables in the table stay exactly the same.
+
 ### Enable HTTPS Only
 
 12. Left menu → **"Settings"** → **"Configuration"**
@@ -359,7 +377,10 @@ App Service hosts the web application.
     - **Minimum TLS Version**: **1.2**
 14. Click **"Save"**
 
-### Enable Managed Identity (for Key Vault)
+### Enable Managed Identity (for Key Vault) *(Optional — skip if not using Key Vault)*
+
+> [!NOTE]
+> **If you skipped Key Vault (Step 2):** Skip steps 15–22 below entirely. Your secrets are already configured as environment variables above — no Managed Identity or Key Vault access grant is needed.
 
 15. Left menu → **"Settings"** → **"Identity"**
 16. Under **"System assigned"** tab:
@@ -367,7 +388,7 @@ App Service hosts the web application.
 17. Click **"Save"** → **"Yes"** to confirm
 18. Copy the **Object (principal) ID** that appears
 
-### Grant Key Vault Access to App Service
+### Grant Key Vault Access to App Service *(Optional — skip if not using Key Vault)*
 
 19. Go back to your Key Vault (`kv-nutriai-prod`)
 20. Left menu → **"Access control (IAM)"**
@@ -644,11 +665,11 @@ Ensure your App Service can reach the PostgreSQL database.
 After deployment, verify all items:
 
 - [ ] `SECRET_KEY` is a strong random value (not the default)
-- [ ] All API keys stored in Azure Key Vault
+- [ ] All API keys stored in Azure Key Vault **or** in App Service Environment Variables
 - [ ] PostgreSQL is **not** publicly accessible (or restricted to Azure services only)
 - [ ] Storage account has **no public blob access**
 - [ ] **HTTPS Only** enabled on App Service
-- [ ] **Managed Identity** enabled for Key Vault access
+- [ ] **Managed Identity** enabled for Key Vault access *(skip if not using Key Vault)*
 - [ ] Entra ID app registration has minimal permissions (User.Read only)
 - [ ] Application Insights monitoring is active
 - [ ] Database backup retention is at least 14 days
@@ -667,7 +688,7 @@ After deployment, verify all items:
 | Azure OpenAI (GPT-4) | Standard | ~$20–100 (usage-based) |
 | Document Intelligence | Standard S0 | ~$50 (usage-based) |
 | Function App | Consumption | ~$0–5 |
-| Key Vault | Standard | ~$1 |
+| Key Vault *(optional)* | Standard | ~$1 (free if skipped) |
 | Application Insights | Pay-as-you-go | ~$5–15 |
 | Container Registry | Basic | ~$5 |
 | **Total (Estimated)** | | **~$165–260/month** |
@@ -739,7 +760,7 @@ When you make code changes and want to redeploy:
 | `AZURE_OPENAI_KEY` | Step 5 (OpenAI Keys and Endpoint) |
 | `AZURE_OPENAI_DEPLOYMENT_NAME` | `gpt-4` |
 | `AZURE_OPENAI_API_VERSION` | `2024-02-01` |
-| `AZURE_KEYVAULT_URL` | Step 2 (Key Vault URI) |
+| `AZURE_KEYVAULT_URL` | Step 2 (Key Vault URI) — *omit if not using Key Vault* |
 | `ENTRA_CLIENT_ID` | Step 10 (App registration) |
 | `ENTRA_CLIENT_SECRET` | Step 10 (App registration) |
 | `ENTRA_TENANT_ID` | Step 10 (App registration) |
