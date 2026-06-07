@@ -1,0 +1,87 @@
+"""
+NutriAI Health Portal - User Models
+User, PatientProfile, and FoodAllergy models.
+"""
+
+import uuid
+from datetime import datetime
+
+from sqlalchemy import (
+    Column, String, Integer, Float, Boolean, DateTime, Text, ForeignKey, Enum, JSON
+)
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
+
+from app.database import Base
+
+
+class User(Base):
+    """User account model supporting local and Entra ID authentication."""
+
+    __tablename__ = "users"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    username = Column(String(100), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(255), nullable=True)
+    full_name = Column(String(255), nullable=False)
+    age = Column(Integer, nullable=True)
+    gender = Column(String(20), nullable=True)
+    weight = Column(Float, nullable=True)
+    height = Column(Float, nullable=True)
+    auth_type = Column(
+        Enum("local", "entra_id", name="auth_type_enum"),
+        default="local",
+        nullable=False,
+    )
+    entra_oid = Column(String(255), unique=True, nullable=True)
+    role = Column(
+        Enum("patient", "admin", name="role_enum"),
+        default="patient",
+        nullable=False,
+    )
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    profile = relationship("PatientProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    allergies = relationship("FoodAllergy", back_populates="user", cascade="all, delete-orphan")
+    documents = relationship("Document", back_populates="user", cascade="all, delete-orphan")
+    diet_plans = relationship("DietPlan", back_populates="user", cascade="all, delete-orphan")
+    health_logs = relationship("HealthLog", back_populates="user", cascade="all, delete-orphan")
+    meal_logs = relationship("MealLog", back_populates="user", cascade="all, delete-orphan")
+
+
+class PatientProfile(Base):
+    """Extended patient profile with medical and dietary information."""
+
+    __tablename__ = "patient_profiles"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    medical_conditions = Column(JSON, default=list)
+    dietary_preferences = Column(JSON, default=list)
+    blood_type = Column(String(10), nullable=True)
+    emergency_contact = Column(String(255), nullable=True)
+
+    # Relationships
+    user = relationship("User", back_populates="profile")
+
+
+class FoodAllergy(Base):
+    """Food allergy record for a patient."""
+
+    __tablename__ = "food_allergies"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    allergen_name = Column(String(255), nullable=False)
+    severity = Column(
+        Enum("mild", "moderate", "severe", name="severity_enum"),
+        nullable=False,
+        default="moderate",
+    )
+    notes = Column(Text, nullable=True)
+
+    # Relationships
+    user = relationship("User", back_populates="allergies")

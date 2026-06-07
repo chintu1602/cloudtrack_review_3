@@ -1,0 +1,93 @@
+# ============================================================
+# NutriAI Health Portal - Docker Compose
+# App service + PostgreSQL 15 with persistent volume
+# ============================================================
+
+version: "3.9"
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: nutriai-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nutriai
+      POSTGRES_USER: nutriai_user
+      POSTGRES_PASSWORD: nutriai_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nutriai_user -d nutriai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - nutriai-network
+
+  # NutriAI Web Application
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nutriai-web
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Application
+      SECRET_KEY: ${SECRET_KEY:-change-this-secret-key-in-production}
+      DEBUG: ${DEBUG:-false}
+      DATABASE_URL: postgresql://nutriai_user:nutriai_password@db:5432/nutriai
+
+      # Azure Storage
+      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING:-}
+      AZURE_STORAGE_CONTAINER_NAME: ${AZURE_STORAGE_CONTAINER_NAME:-health-documents}
+
+      # Azure Document Intelligence
+      AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT: ${AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT:-}
+      AZURE_DOCUMENT_INTELLIGENCE_KEY: ${AZURE_DOCUMENT_INTELLIGENCE_KEY:-}
+
+      # Azure OpenAI
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_KEY: ${AZURE_OPENAI_KEY:-}
+      AZURE_OPENAI_DEPLOYMENT_NAME: ${AZURE_OPENAI_DEPLOYMENT_NAME:-gpt-4}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-2024-02-01}
+
+      # Azure Key Vault
+      AZURE_KEYVAULT_URL: ${AZURE_KEYVAULT_URL:-}
+
+      # Microsoft Entra ID
+      ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID:-}
+      ENTRA_CLIENT_SECRET: ${ENTRA_CLIENT_SECRET:-}
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:-}
+      ENTRA_REDIRECT_URI: ${ENTRA_REDIRECT_URI:-http://localhost:8000/auth/callback}
+
+      # Application Insights
+      APPLICATIONINSIGHTS_CONNECTION_STRING: ${APPLICATIONINSIGHTS_CONNECTION_STRING:-}
+
+      # Function App
+      FUNCTION_APP_URL: ${FUNCTION_APP_URL:-http://localhost:7071}
+      FUNCTION_APP_KEY: ${FUNCTION_APP_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - nutriai-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  nutriai-network:
+    driver: bridge

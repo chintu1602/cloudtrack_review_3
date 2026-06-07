@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% block title %}Generate Diet Plan - NutriAI Health Portal{% endblock %}
+
+{% block content %}
+<div class="container py-4 page-content">
+    <div class="mb-4">
+        <h3 class="fw-bold mb-1">Generate Diet Plan</h3>
+        <p class="text-muted mb-0">Select your documents and let AI create a personalized nutrition plan</p>
+    </div>
+
+    {% if existing_plan %}
+    <!-- Viewing Existing Plan -->
+    <div class="mb-3">
+        <a href="/diet-plan/history" class="btn btn-nutriai-outline btn-sm">
+            <i class="fas fa-arrow-left me-1"></i>Back to History
+        </a>
+        <a href="/diet-plan/{{ existing_plan.id }}/pdf" class="btn btn-nutriai-secondary btn-sm">
+            <i class="fas fa-download me-1"></i>Download PDF
+        </a>
+    </div>
+    <div id="result-container">
+        <!-- Plan Title -->
+        <div class="content-card diet-result-card mb-4">
+            <h4 class="text-primary-green mb-2"><i class="fas fa-utensils me-2"></i>{{ existing_plan.plan_title }}</h4>
+            <p class="text-muted">{{ existing_plan.plan_summary }}</p>
+            <span class="badge bg-secondary rounded-pill"><i class="fas fa-clock me-1"></i>{{ existing_plan.generated_at.strftime('%B %d, %Y') }}</span>
+        </div>
+
+        <!-- Foods to Eat -->
+        {% if existing_plan.foods_to_eat %}
+        <div class="content-card foods-eat-card diet-result-card mb-4">
+            <h5 class="text-primary-green mb-3"><i class="fas fa-check-circle me-2"></i>Foods to Eat</h5>
+            <div class="table-responsive">
+                <table class="table table-nutriai">
+                    <thead><tr><th>Food</th><th>Reason</th><th>Portion Size</th><th>Timing</th></tr></thead>
+                    <tbody>
+                        {% for food in existing_plan.foods_to_eat %}
+                        <tr>
+                            <td><strong>{{ food.food_name }}</strong></td>
+                            <td>{{ food.reason }}</td>
+                            <td>{{ food.get('portion_size', '') }}</td>
+                            <td>{{ food.get('timing', '') }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Foods to Avoid -->
+        {% if existing_plan.foods_to_avoid %}
+        <div class="content-card foods-avoid-card diet-result-card mb-4">
+            <h5 class="text-danger mb-3"><i class="fas fa-times-circle me-2"></i>Foods to Avoid</h5>
+            <div class="table-responsive">
+                <table class="table table-nutriai">
+                    <thead><tr><th>Food</th><th>Reason</th><th>Risk Level</th></tr></thead>
+                    <tbody>
+                        {% for food in existing_plan.foods_to_avoid %}
+                        <tr>
+                            <td><strong>{{ food.food_name }}</strong></td>
+                            <td>{{ food.reason }}</td>
+                            <td>
+                                <span class="badge {% if food.get('risk_level') == 'high' %}bg-danger{% elif food.get('risk_level') == 'medium' %}bg-warning text-dark{% else %}bg-info{% endif %}">
+                                    {{ food.get('risk_level', '') }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Weekly Meal Plan -->
+        {% if existing_plan.weekly_meal_plan %}
+        <div class="content-card diet-result-card mb-4">
+            <h5 class="text-secondary-blue mb-3"><i class="fas fa-calendar-week me-2"></i>Weekly Meal Plan</h5>
+            <div class="accordion meal-plan-accordion" id="existingMealPlan">
+                {% for day in ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'] %}
+                {% if existing_plan.weekly_meal_plan.get(day) %}
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button {% if not loop.first %}collapsed{% endif %}" type="button"
+                                data-bs-toggle="collapse" data-bs-target="#existing-{{ day }}">
+                            <i class="fas fa-calendar-day me-2"></i>{{ day | title }}
+                        </button>
+                    </h2>
+                    <div id="existing-{{ day }}" class="accordion-collapse collapse {% if loop.first %}show{% endif %}" data-bs-parent="#existingMealPlan">
+                        <div class="accordion-body">
+                            <p><strong>🌅 Breakfast:</strong> {{ existing_plan.weekly_meal_plan[day].get('breakfast', '') }}</p>
+                            <p><strong>☀️ Lunch:</strong> {{ existing_plan.weekly_meal_plan[day].get('lunch', '') }}</p>
+                            <p><strong>🌙 Dinner:</strong> {{ existing_plan.weekly_meal_plan[day].get('dinner', '') }}</p>
+                            <p><strong>🍎 Snacks:</strong> {{ existing_plan.weekly_meal_plan[day].get('snacks', '') }}</p>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Nutritional Guidelines -->
+        {% if existing_plan.nutritional_guidelines %}
+        <div class="content-card diet-result-card mb-4">
+            <h5 class="text-primary-green mb-3"><i class="fas fa-chart-pie me-2"></i>Nutritional Guidelines</h5>
+            <div class="row g-3">
+                {% set ng = existing_plan.nutritional_guidelines %}
+                {% for item in [
+                    ('Daily Calories', ng.get('daily_calories'), 'kcal', 'fa-fire'),
+                    ('Protein', ng.get('protein_grams'), 'g', 'fa-drumstick-bite'),
+                    ('Carbs', ng.get('carbs_grams'), 'g', 'fa-bread-slice'),
+                    ('Fats', ng.get('fats_grams'), 'g', 'fa-cheese'),
+                    ('Fiber', ng.get('fiber_grams'), 'g', 'fa-seedling'),
+                    ('Water', ng.get('water_liters'), 'L', 'fa-tint')
+                ] %}
+                {% if item[1] %}
+                <div class="col-6 col-md-4">
+                    <div class="text-center p-3 rounded" style="background: var(--bg-light);">
+                        <i class="fas {{ item[3] }} text-primary-green mb-1" style="font-size:1.3rem;"></i>
+                        <div class="fw-bold" style="font-size:1.3rem;">{{ item[1] }} <small class="text-muted">{{ item[2] }}</small></div>
+                        <small class="text-muted">{{ item[0] }}</small>
+                    </div>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Allergy Notes -->
+        {% if existing_plan.allergy_notes %}
+        <div class="content-card diet-result-card mb-4" style="border-left: 4px solid #EF6C00;">
+            <h5 style="color: #EF6C00;"><i class="fas fa-exclamation-triangle me-2"></i>Allergy Notes</h5>
+            <ul class="mb-0 mt-2">
+                {% for note in existing_plan.allergy_notes %}
+                <li>{{ note }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+
+    {% else %}
+    <!-- Generate New Plan -->
+    <div class="row g-4">
+        <!-- Left Panel: Document Selection -->
+        <div class="col-lg-5">
+            <div class="content-card mb-4">
+                <div class="card-header-custom">
+                    <h5><i class="fas fa-file-medical text-primary-green me-2"></i>Select Documents</h5>
+                </div>
+
+                {% if documents %}
+                <div class="list-group list-group-flush">
+                    {% for doc in documents %}
+                    <label class="list-group-item d-flex align-items-center gap-3 py-3" style="cursor: pointer;">
+                        <input class="form-check-input" type="checkbox" name="document_ids" value="{{ doc.id }}">
+                        <div>
+                            <div class="fw-semibold" style="font-size: 0.9rem;">{{ doc.original_filename[:35] }}{% if doc.original_filename|length > 35 %}...{% endif %}</div>
+                            <small class="text-muted">{{ doc.document_type | replace('_',' ') | title }} • {{ doc.uploaded_at.strftime('%b %d') }}</small>
+                        </div>
+                    </label>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-file-medical text-muted mb-2" style="font-size: 2rem;"></i>
+                    <p class="text-muted mb-2" style="font-size: 0.9rem;">No completed documents available</p>
+                    <a href="/documents" class="btn btn-sm btn-nutriai-primary">Upload Documents</a>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Additional Notes -->
+            <div class="content-card mb-4">
+                <div class="card-header-custom">
+                    <h5><i class="fas fa-sticky-note text-primary-green me-2"></i>Additional Notes</h5>
+                </div>
+                <textarea class="form-control form-control-nutriai" id="additional-notes" rows="3"
+                          placeholder="Any specific dietary goals, preferences, or concerns..."></textarea>
+            </div>
+
+            <!-- Allergy Reminder -->
+            {% if allergies %}
+            <div class="content-card" style="border-left: 4px solid #EF6C00;">
+                <h6 style="color: #EF6C00;"><i class="fas fa-exclamation-triangle me-2"></i>Your Allergies</h6>
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    {% for allergy in allergies %}
+                    <span class="allergy-badge {{ allergy.severity }}">
+                        {{ allergy.allergen_name }} ({{ allergy.severity }})
+                    </span>
+                    {% endfor %}
+                </div>
+                <small class="text-muted mt-2 d-block">These allergies will be considered during plan generation.</small>
+            </div>
+            {% endif %}
+
+            <!-- Generate Button -->
+            <button class="btn btn-nutriai-primary w-100 py-3 mt-3" id="generate-btn" onclick="generateDietPlan()">
+                <i class="fas fa-magic me-2"></i>Generate Diet Plan
+            </button>
+        </div>
+
+        <!-- Right Panel: Results -->
+        <div class="col-lg-7">
+            <!-- Loading -->
+            <div class="loading-container" id="loading-container" style="display: none;">
+                <div class="loading-spinner"></div>
+                <h5 class="text-primary-green">Generating Your Diet Plan...</h5>
+                <p class="text-muted">Our AI is analyzing your documents and creating a personalized plan</p>
+            </div>
+
+            <!-- Results Container -->
+            <div id="result-container" style="display: none;"></div>
+
+            <!-- Placeholder -->
+            <div id="placeholder-container" class="text-center py-5">
+                <i class="fas fa-utensils text-muted mb-3" style="font-size: 4rem; opacity: 0.3;"></i>
+                <h5 class="text-muted">Your Diet Plan Will Appear Here</h5>
+                <p class="text-muted" style="font-size: 0.9rem;">Select documents and click Generate to get started</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

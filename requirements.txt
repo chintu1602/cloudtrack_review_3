@@ -1,0 +1,46 @@
+# FastAPI & Web
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+gunicorn==23.0.0
+python-multipart==0.0.20
+jinja2==3.1.5
+aiofiles==24.1.0
+itsdangerous==2.2.0
+
+# Database
+sqlalchemy==2.0.36
+psycopg2-binary==2.9.10
+alembic==1.14.1
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.2.1
+msal==1.31.1
+
+# Azure Services
+azure-storage-blob==12.24.0
+azure-ai-formrecognizer==3.3.3
+openai==1.58.1
+azure-keyvault-secrets==4.9.0
+azure-identity==1.19.0
+azure-monitor-opentelemetry==1.6.4
+opencensus-ext-azure==1.1.13
+
+# Pydantic & Settings
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# HTTP Client
+httpx==0.28.1
+
+# PDF Generation
+reportlab==4.2.5
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.25.0
+pytest-cov==6.0.0
+
+# Utilities
+python-dotenv==1.0.1

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Diet Plan History - NutriAI Health Portal{% endblock %}
+
+{% block content %}
+<div class="container py-4 page-content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3 class="fw-bold mb-1">Diet Plan History</h3>
+            <p class="text-muted mb-0">View all your previously generated diet plans</p>
+        </div>
+        <a href="/diet-plan" class="btn btn-nutriai-primary">
+            <i class="fas fa-plus me-1"></i>Generate New
+        </a>
+    </div>
+
+    <div class="content-card">
+        {% if plans %}
+        <div class="table-responsive">
+            <table class="table table-nutriai mb-0">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Title</th>
+                        <th>Summary</th>
+                        <th>Foods</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for plan in plans %}
+                    <tr>
+                        <td>
+                            <span class="fw-semibold">{{ plan.generated_at.strftime('%b %d, %Y') }}</span>
+                            <br><small class="text-muted">{{ plan.generated_at.strftime('%H:%M') }}</small>
+                        </td>
+                        <td>
+                            <i class="fas fa-utensils text-primary-green me-1"></i>
+                            {{ plan.plan_title[:40] }}{% if plan.plan_title|length > 40 %}...{% endif %}
+                        </td>
+                        <td style="max-width: 250px;">
+                            <small>{{ plan.plan_summary[:80] }}{% if plan.plan_summary and plan.plan_summary|length > 80 %}...{% endif %}</small>
+                        </td>
+                        <td>
+                            <span class="badge bg-success rounded-pill me-1">{{ plan.foods_to_eat|length }} eat</span>
+                            <span class="badge bg-danger rounded-pill">{{ plan.foods_to_avoid|length }} avoid</span>
+                        </td>
+                        <td>
+                            <div class="d-flex gap-1">
+                                <a href="/diet-plan/{{ plan.id }}" class="btn btn-sm btn-nutriai-outline" title="View">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <a href="/diet-plan/{{ plan.id }}/pdf" class="btn btn-sm btn-nutriai-secondary" title="Download PDF">
+                                    <i class="fas fa-download"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-history text-muted mb-3" style="font-size: 3rem;"></i>
+            <p class="text-muted mb-2">No diet plans generated yet</p>
+            <a href="/diet-plan" class="btn btn-nutriai-primary">Generate Your First Plan</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
