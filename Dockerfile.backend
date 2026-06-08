@@ -1,0 +1,56 @@
+# ============================================================
+# NutriAI Health Portal - Backend Dockerfile (All Microservices)
+# Single container running 8 services via supervisord
+# ============================================================
+
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    APP_HOME=/app
+
+WORKDIR $APP_HOME
+
+# Install system dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc libpq-dev curl supervisor && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy all service requirements and install
+COPY services/api-gateway/requirements.txt /tmp/reqs/api-gateway.txt
+COPY services/auth-service/requirements.txt /tmp/reqs/auth-service.txt
+COPY services/document-service/requirements.txt /tmp/reqs/document-service.txt
+COPY services/diet-service/requirements.txt /tmp/reqs/diet-service.txt
+COPY services/health-service/requirements.txt /tmp/reqs/health-service.txt
+COPY services/notification-service/requirements.txt /tmp/reqs/notification-service.txt
+COPY services/profile-service/requirements.txt /tmp/reqs/profile-service.txt
+COPY services/admin-service/requirements.txt /tmp/reqs/admin-service.txt
+
+# Install all dependencies (deduplicated by pip)
+RUN cat /tmp/reqs/*.txt | sort -u > /tmp/all-requirements.txt && \
+    pip install --no-cache-dir -r /tmp/all-requirements.txt && \
+    rm -rf /tmp/reqs /tmp/all-requirements.txt
+
+# Copy all services
+COPY services/ $APP_HOME/services/
+
+# Copy supervisord config
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Create log directory
+RUN mkdir -p /var/log
+
+# Create non-root user
+RUN groupadd -r nutriai && \
+    useradd -r -g nutriai -d $APP_HOME -s /sbin/nologin nutriai && \
+    chown -R nutriai:nutriai $APP_HOME /var/log
+
+# Expose API gateway port
+EXPOSE 8000
+
+# Health check via API gateway
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Start all services via supervisord
+CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

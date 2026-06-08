@@ -1,788 +1,1183 @@
-# 🚀 NutriAI Health Portal - Azure Portal Deployment Guide
+# 🚀 NutriAI Health Portal — Deployment Guide
 
-> Step-by-step guide to deploying the NutriAI Health Portal using the **Azure Portal** (GUI). Every step includes exact navigation paths and field values.
-
----
-
-## 📋 Prerequisites
-
-- An **Azure account** with an active subscription ([Create one free](https://azure.microsoft.com/free/))
-- **Owner** or **Contributor** role on the subscription
-- [Docker Desktop](https://www.docker.com/get-started/) installed locally (for building the container image)
-- The project source code on your local machine
+Complete deployment guide for the NutriAI Health Portal on Microsoft Azure. This document covers prerequisites, infrastructure provisioning with Terraform, application deployment, monitoring setup, and operational procedures.
 
 ---
 
-## Step 1: Create a Resource Group
+## Table of Contents
 
-A Resource Group is a container that holds all related Azure resources.
-
-1. Go to the [Azure Portal](https://portal.azure.com)
-2. In the top search bar, type **"Resource groups"** and select it
-3. Click **"+ Create"**
-4. Fill in:
-   | Field | Value |
-   |-------|-------|
-   | Subscription | *Select your subscription* |
-   | Resource group | `rg-nutriai-prod` |
-   | Region | `East US` *(or your preferred region)* |
-5. Click **"Review + create"** → **"Create"**
-
-> [!TIP]
-> Choose a region close to your users. All subsequent resources should be created in the **same region** for best performance and to avoid cross-region data transfer costs.
-
----
-
-## Step 2: Create Azure Key Vault *(Optional)*
-
-> [!NOTE]
-> **Key Vault is optional.** It is the recommended way to store secrets in production, but for development or simpler setups you can skip this step entirely and paste your secrets directly into App Service / Function App **Environment Variables** (configured in Steps 8 and 9). Every subsequent "Store in Key Vault" section includes an **"Alternative (Without Key Vault)"** note.
-
-Key Vault securely stores all secrets (API keys, connection strings, passwords).
-
-1. Search **"Key vaults"** in the portal search bar → Click **"+ Create"**
-2. **Basics** tab:
-   | Field | Value |
-   |-------|-------|
-   | Subscription | *Your subscription* |
-   | Resource group | `rg-nutriai-prod` |
-   | Key vault name | `kv-nutriai-prod` *(must be globally unique)* |
-   | Region | `East US` |
-   | Pricing tier | **Standard** |
-3. **Access configuration** tab:
-   - Permission model: **Azure role-based access control (RBAC)**
-4. Click **"Review + create"** → **"Create"**
-5. After deployment, go to the Key Vault resource
-6. Go to **"Access control (IAM)"** in the left menu
-7. Click **"+ Add"** → **"Add role assignment"**
-   - Role: **Key Vault Secrets Officer**
-   - Members: Select your own Azure account
-   - Click **"Review + assign"**
-
-> [!IMPORTANT]
-> You'll come back to Key Vault later to store secrets after creating each service.
+1. [Prerequisites](#1-prerequisites)
+2. [Architecture Overview](#2-architecture-overview)
+3. [Azure Account Setup](#3-azure-account-setup)
+4. [Terraform State Backend](#4-terraform-state-backend)
+5. [Infrastructure Provisioning](#5-infrastructure-provisioning)
+6. [Database Setup](#6-database-setup)
+7. [Container Registry & Image Build](#7-container-registry--image-build)
+8. [Backend Deployment](#8-backend-deployment)
+9. [Frontend Deployment](#9-frontend-deployment)
+10. [Azure Function App (OCR)](#10-azure-function-app-ocr)
+11. [Microsoft Entra ID (SSO)](#11-microsoft-entra-id-sso)
+12. [Service Bus Configuration](#12-service-bus-configuration)
+13. [Email Configuration](#13-email-configuration)
+14. [Monitoring & Alerts](#14-monitoring--alerts)
+15. [SSL/TLS & Custom Domain](#15-ssltls--custom-domain)
+16. [CI/CD Pipeline](#16-cicd-pipeline)
+17. [Local Development](#17-local-development)
+18. [Troubleshooting](#18-troubleshooting)
+19. [Operational Procedures](#19-operational-procedures)
+20. [Cost Estimation](#20-cost-estimation)
 
 ---
 
-## Step 3: Create Azure Storage Account
+## 1. Prerequisites
 
-Azure Blob Storage holds uploaded medical documents.
+### Required Tools
 
-1. Search **"Storage accounts"** → Click **"+ Create"**
-2. **Basics** tab:
-   | Field | Value |
-   |-------|-------|
-   | Subscription | *Your subscription* |
-   | Resource group | `rg-nutriai-prod` |
-   | Storage account name | `stnutriaiprod` *(must be globally unique, lowercase, no dashes)* |
-   | Region | `East US` |
-   | Performance | **Standard** |
-   | Redundancy | **Locally-redundant storage (LRS)** |
-3. **Advanced** tab:
-   - Minimum TLS version: **Version 1.2**
-   - Allow Blob anonymous access: **Disabled** ☐
-4. Click **"Review + create"** → **"Create"**
+| Tool | Version | Purpose |
+|------|---------|---------|
+| Azure CLI | ≥ 2.55 | Azure resource management |
+| Terraform | ≥ 1.5.0 | Infrastructure as Code |
+| Docker | ≥ 24.0 | Container builds |
+| Docker Compose | ≥ 2.20 | Local development |
+| Node.js | ≥ 20.0 | Frontend build |
+| Python | ≥ 3.11 | Backend development |
+| Git | ≥ 2.40 | Version control |
 
-### Create the Blob Container
+### Required Azure Services
 
-5. Go to the storage account resource after deployment
-6. In the left menu, under **"Data storage"**, click **"Containers"**
-7. Click **"+ Container"**
-   | Field | Value |
-   |-------|-------|
-   | Name | `health-documents` |
-   | Anonymous access level | **Private (no anonymous access)** |
-8. Click **"Create"**
+- Azure Resource Group
+- Azure Virtual Network
+- Azure Key Vault
+- Azure Database for PostgreSQL Flexible Server
+- Azure Storage Account (Blob)
+- Azure Container Registry
+- Azure App Service (Linux)
+- Azure Static Web App
+- Azure OpenAI Service
+- Azure Service Bus
+- Azure Function App
+- Azure Application Insights
+- Azure Log Analytics Workspace
+- Azure Monitor Alerts
+- Microsoft Entra ID (Azure AD)
 
-### Copy the Connection String
+### Required Azure Permissions
 
-9. In the left menu, go to **"Security + networking"** → **"Access keys"**
-10. Click **"Show"** next to Key 1's Connection string
-11. Click the **copy icon** — save this for later
+- **Subscription**: Contributor role
+- **Azure AD**: Application Administrator (for Entra ID app registration)
+- **OpenAI**: Cognitive Services Contributor
 
-### Store in Key Vault *(Optional)*
-
-12. Go back to your Key Vault (`kv-nutriai-prod`)
-13. Left menu → **"Objects"** → **"Secrets"** → **"+ Generate/Import"**
-    | Field | Value |
-    |-------|-------|
-    | Name | `storage-connection-string` |
-    | Secret value | *Paste the connection string you copied* |
-14. Click **"Create"**
-
-> [!TIP]
-> **Alternative (Without Key Vault):** Simply save the connection string somewhere safe (e.g., a text file on your machine). You will paste it directly into the App Service **Environment Variables** as `AZURE_STORAGE_CONNECTION_STRING` in **Step 8**.
-
----
-
-## Step 4: Create PostgreSQL Flexible Server
-
-PostgreSQL is the application's primary database.
-
-1. Search **"Azure Database for PostgreSQL flexible servers"** → Click **"+ Create"**
-2. Select **"Flexible server"** → **"Create"**
-3. **Basics** tab:
-   | Field | Value |
-   |-------|-------|
-   | Subscription | *Your subscription* |
-   | Resource group | `rg-nutriai-prod` |
-   | Server name | `psql-nutriai-prod` *(must be globally unique)* |
-   | Region | `East US` |
-   | PostgreSQL version | **15** |
-   | Workload type | **Development** *(cheapest; use Production for live workloads)* |
-   | Compute + storage | Click **"Configure server"** → Select **Burstable, B2s** → **"Save"** |
-   | Authentication method | **PostgreSQL authentication only** |
-   | Admin username | `nutriai_admin` |
-   | Password | *Create a strong password and save it* |
-4. **Networking** tab:
-   - Connectivity method: **Public access (allowed IP addresses)**
-   - Check ✅ **"Allow public access from any Azure service within Azure to this server"**
-   - Click **"+ Add current client IP address"** (for local development)
-5. Click **"Review + create"** → **"Create"** *(takes 5-10 minutes)*
-
-### Create the Application Database
-
-6. After deployment, go to the PostgreSQL server resource
-7. Left menu → **"Settings"** → **"Databases"**
-8. Click **"+ Add"**
-   | Field | Value |
-   |-------|-------|
-   | Name | `nutriai` |
-9. Click **"Save"**
-
-### Build the Connection String
-
-Your database URL is:
-```
-postgresql://nutriai_admin:<YOUR_PASSWORD>@psql-nutriai-prod.postgres.database.azure.com:5432/nutriai?sslmode=require
-```
-
-### Store in Key Vault *(Optional)*
-
-10. Go to Key Vault → **"Secrets"** → **"+ Generate/Import"**
-    | Field | Value |
-    |-------|-------|
-    | Name | `database-url` |
-    | Secret value | *Paste the connection string above (with your actual password)* |
-11. Click **"Create"**
-
-> [!TIP]
-> **Alternative (Without Key Vault):** Save the database connection string somewhere safe. You will paste it directly into App Service **Environment Variables** as `DATABASE_URL` in **Step 8**.
-
----
-
-## Step 5: Create Azure OpenAI Service
-
-Azure OpenAI powers the AI diet plan generation.
-
-1. Search **"Azure OpenAI"** → Click **"+ Create"**
-2. **Basics** tab:
-   | Field | Value |
-   |-------|-------|
-   | Subscription | *Your subscription* |
-   | Resource group | `rg-nutriai-prod` |
-   | Region | `East US` |
-   | Name | `oai-nutriai-prod` |
-   | Pricing tier | **Standard S0** |
-3. Click **"Review + submit"** → **"Create"**
-
-### Deploy the GPT-4 Model
-
-4. After deployment, go to the resource → Click **"Go to Azure OpenAI Studio"**  
-   *(or navigate to [Azure AI Foundry](https://ai.azure.com))*
-5. In the left menu, click **"Deployments"** → **"+ Create deployment"**
-   | Field | Value |
-   |-------|-------|
-   | Model | **gpt-4** |
-   | Deployment name | `gpt-4` |
-   | Deployment type | **Standard** |
-   | Tokens per Minute Rate Limit | `30K` *(adjust based on your needs)* |
-6. Click **"Create"**
-
-### Copy Endpoint and Key
-
-7. Go back to the Azure OpenAI resource in the portal (not AI Studio)
-8. Left menu → **"Resource Management"** → **"Keys and Endpoint"**
-9. Copy:
-   - **Endpoint** (e.g., `https://oai-nutriai-prod.openai.azure.com/`)
-   - **Key 1** — save both for later
-
-### Store in Key Vault *(Optional)*
-
-10. Go to Key Vault → **"Secrets"** → **"+ Generate/Import"**
-    | Field | Value |
-    |-------|-------|
-    | Name | `openai-key` |
-    | Secret value | *Paste Key 1* |
-11. Click **"Create"**
-
-> [!TIP]
-> **Alternative (Without Key Vault):** Save the Endpoint and Key 1 somewhere safe. You will paste them directly into App Service **Environment Variables** as `AZURE_OPENAI_ENDPOINT` and `AZURE_OPENAI_KEY` in **Step 8**.
-
----
-
-## Step 6: Create Azure Document Intelligence
-
-Document Intelligence handles OCR (text extraction) from medical documents.
-
-1. Search **"Document Intelligence"** (or "Azure AI Document Intelligence") → Click **"+ Create"**
-2. **Basics** tab:
-   | Field | Value |
-   |-------|-------|
-   | Subscription | *Your subscription* |
-   | Resource group | `rg-nutriai-prod` |
-   | Region | `East US` |
-   | Name | `di-nutriai-prod` |
-   | Pricing tier | **Standard S0** |
-3. Click **"Review + create"** → **"Create"**
-
-### Copy Endpoint and Key
-
-4. After deployment, go to the resource
-5. Left menu → **"Resource Management"** → **"Keys and Endpoint"**
-6. Copy:
-   - **Endpoint** (e.g., `https://di-nutriai-prod.cognitiveservices.azure.com/`)
-   - **Key 1**
-
-### Store in Key Vault *(Optional)*
-
-7. Go to Key Vault → **"Secrets"** → **"+ Generate/Import"**
-   | Field | Value |
-   |-------|-------|
-   | Name | `doc-intelligence-key` |
-   | Secret value | *Paste Key 1* |
-8. Click **"Create"**
-
-> [!TIP]
-> **Alternative (Without Key Vault):** Save the Endpoint and Key 1 somewhere safe. You will paste them directly into App Service **Environment Variables** as `AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT` and `AZURE_DOCUMENT_INTELLIGENCE_KEY` in **Step 8**.
-
----
-
-## Step 7: Create Azure Container Registry (ACR)
-
-ACR stores your Docker image so App Service can pull it.
-
-1. Search **"Container registries"** → Click **"+ Create"**
-2. **Basics** tab:
-   | Field | Value |
-   |-------|-------|
-   | Subscription | *Your subscription* |
-   | Resource group | `rg-nutriai-prod` |
-   | Registry name | `acrnutriaiprod` *(must be globally unique, alphanumeric only)* |
-   | Region | `East US` |
-   | SKU | **Basic** |
-3. Click **"Review + create"** → **"Create"**
-
-### Enable Admin User
-
-4. After deployment, go to the ACR resource
-5. Left menu → **"Settings"** → **"Access keys"**
-6. Toggle **"Admin user"** to **Enabled**
-7. Copy the **Login server**, **Username**, and **password** — you'll need these
-
-### Build and Push Your Docker Image
-
-Open a terminal on your local machine in the project directory:
+### Installation
 
 ```bash
-# Login to ACR
-docker login acrnutriaiprod.azurecr.io -u <username> -p <password>
+# Azure CLI
+curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
 
-# Build the image
-docker build -t nutriai-health-portal:latest .
+# Terraform
+wget https://releases.hashicorp.com/terraform/1.7.0/terraform_1.7.0_linux_amd64.zip
+unzip terraform_1.7.0_linux_amd64.zip
+sudo mv terraform /usr/local/bin/
+
+# Docker
+curl -fsSL https://get.docker.com | sudo sh
+
+# Node.js (via nvm)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+nvm install 20
+```
+
+---
+
+## 2. Architecture Overview
+
+### Service Port Map
+
+| Service | Port | Description |
+|---------|------|-------------|
+| API Gateway | 8000 | Entry point, JWT validation, request routing |
+| Auth Service | 8001 | Authentication, registration, Microsoft SSO |
+| Document Service | 8002 | File upload, Azure Blob, OCR trigger |
+| Diet Service | 8003 | GPT-4 diet generation, PDF, Service Bus |
+| Health Service | 8004 | Health metrics logging, chart data |
+| Notification Service | 8005 | Service Bus consumer, email sending |
+| Profile Service | 8006 | User profiles, allergies, medical info |
+| Admin Service | 8007 | Admin dashboard, user management |
+| Frontend (Dev) | 3000 | React development server |
+| Frontend (Prod) | 80 | Nginx serving React build |
+| PostgreSQL | 5432 | Shared database |
+| Redis | 6379 | Caching (optional) |
+
+### Data Flow
+
+```
+User → React SPA → Nginx/SWA → API Gateway (JWT) → Microservice → PostgreSQL
+                                       ↓
+                                  Azure Blob Storage
+                                  Azure OpenAI (GPT-4)
+                                  Azure Service Bus → Notification Service → Email
+                                  Azure Function App (OCR)
+```
+
+### Authentication Flow
+
+```
+1. User submits login form
+2. Auth Service validates credentials, generates JWT
+3. JWT set as HttpOnly cookie via Set-Cookie header
+4. Subsequent requests include cookie automatically (withCredentials)
+5. API Gateway extracts JWT, validates, injects X-User-ID header
+6. Downstream services trust X-User-ID from API Gateway
+```
+
+### Microsoft SSO Flow
+
+```
+1. User clicks "Sign in with Microsoft"
+2. Frontend redirects to /auth/microsoft
+3. Auth Service generates MSAL auth URL
+4. User authenticates with Microsoft
+5. Microsoft redirects to /auth/microsoft/callback
+6. Auth Service exchanges code for tokens
+7. User created/matched in DB, JWT cookie set
+8. Redirect to /dashboard
+```
+
+---
+
+## 3. Azure Account Setup
+
+### Login and Set Subscription
+
+```bash
+# Login to Azure
+az login
+
+# List subscriptions
+az account list --output table
+
+# Set active subscription
+az account set --subscription "YOUR_SUBSCRIPTION_ID"
+
+# Verify
+az account show --output table
+```
+
+### Register Required Providers
+
+```bash
+az provider register --namespace Microsoft.Web
+az provider register --namespace Microsoft.DBforPostgreSQL
+az provider register --namespace Microsoft.Storage
+az provider register --namespace Microsoft.ContainerRegistry
+az provider register --namespace Microsoft.CognitiveServices
+az provider register --namespace Microsoft.ServiceBus
+az provider register --namespace Microsoft.KeyVault
+az provider register --namespace Microsoft.Network
+az provider register --namespace Microsoft.Insights
+az provider register --namespace Microsoft.OperationalInsights
+```
+
+---
+
+## 4. Terraform State Backend
+
+Create the remote state storage before running Terraform:
+
+```bash
+# Create resource group for Terraform state
+az group create \
+  --name nutriai-terraform-state \
+  --location eastus
+
+# Create storage account (must be globally unique)
+az storage account create \
+  --name nutriaitfstate \
+  --resource-group nutriai-terraform-state \
+  --location eastus \
+  --sku Standard_LRS \
+  --encryption-services blob
+
+# Get storage account key
+ACCOUNT_KEY=$(az storage account keys list \
+  --resource-group nutriai-terraform-state \
+  --account-name nutriaitfstate \
+  --query '[0].value' -o tsv)
+
+# Create blob container
+az storage container create \
+  --name tfstate \
+  --account-name nutriaitfstate \
+  --account-key $ACCOUNT_KEY
+```
+
+---
+
+## 5. Infrastructure Provisioning
+
+### Configure Variables
+
+```bash
+cd terraform/
+
+# Copy and edit the variables file
+cp terraform.tfvars.example terraform.tfvars
+```
+
+Edit `terraform.tfvars` with your values:
+
+```hcl
+project_name = "nutriai"
+environment  = "prod"
+location     = "eastus"
+
+admin_email = "your-admin@email.com"
+
+# Microsoft Entra ID (leave empty to create via Terraform)
+entra_client_id     = ""
+entra_client_secret = ""
+entra_tenant_id     = ""
+
+# OpenAI model deployment name
+openai_model_deployment = "gpt-4"
+
+# Email
+smtp_host     = "smtp.gmail.com"
+smtp_port     = 587
+smtp_username = "your-email@gmail.com"
+smtp_password = "your-app-password"
+
+# Azure SKUs
+app_service_sku = "B2"     # B1, B2, B3, S1, S2, S3, P1v3, P2v3
+postgres_sku    = "B_Standard_B1ms"  # B_Standard_B1ms, GP_Standard_D2s_v3
+```
+
+### Initialize and Apply
+
+```bash
+# Initialize Terraform (downloads providers, configures backend)
+terraform init
+
+# Validate configuration
+terraform validate
+
+# Preview changes
+terraform plan -out=tfplan
+
+# Apply infrastructure
+terraform apply tfplan
+
+# Save outputs
+terraform output -json > ../deployment-outputs.json
+```
+
+### Terraform Module Dependency Graph
+
+```
+resource_group
+    ├── vnet
+    │   ├── postgresql (uses postgres_subnet)
+    │   └── app_service (uses app_service_subnet)
+    ├── key_vault
+    ├── storage
+    ├── container_registry
+    ├── app_service_plan
+    │   ├── app_service
+    │   └── function_app
+    ├── openai
+    ├── service_bus
+    ├── monitoring
+    │   └── alerts
+    ├── static_web_app
+    └── entra_id
+```
+
+---
+
+## 6. Database Setup
+
+PostgreSQL is provisioned by Terraform. After provisioning:
+
+### Verify Connection
+
+```bash
+# Get the FQDN from Terraform output
+DB_FQDN=$(terraform output -raw database_fqdn)
+
+# Test connection (requires VPN/VNet peering since it's private)
+psql "postgresql://nutriai_admin:$(terraform output -raw db_password)@${DB_FQDN}:5432/nutriai?sslmode=require"
+```
+
+### Database Schema
+
+The schema is automatically created by SQLAlchemy's `Base.metadata.create_all()` on each service startup. Tables created:
+
+| Table | Service | Description |
+|-------|---------|-------------|
+| `users` | Auth, Profile, Diet, Admin | User accounts |
+| `patient_profiles` | Profile | Medical conditions, preferences |
+| `food_allergies` | Profile, Diet | Allergen tracking |
+| `documents` | Document, Diet, Admin | Uploaded medical documents |
+| `diet_plans` | Diet, Admin | AI-generated diet plans |
+| `health_logs` | Health, Admin | Daily health metrics |
+| `meal_logs` | Health | Meal tracking |
+| `notifications` | Notification | In-app notifications |
+
+### Manual Migration (if needed)
+
+```sql
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Verify tables exist
+\dt
+
+-- Check table schemas
+\d users
+\d diet_plans
+```
+
+---
+
+## 7. Container Registry & Image Build
+
+### Login to ACR
+
+```bash
+ACR_NAME=$(terraform output -raw container_registry_login_server)
+
+# Login
+az acr login --name ${ACR_NAME%%.*}
+```
+
+### Build and Push Backend Image
+
+```bash
+# From project root
+docker build -f Dockerfile.backend -t nutriai-backend:latest .
 
 # Tag for ACR
-docker tag nutriai-health-portal:latest acrnutriaiprod.azurecr.io/nutriai-health-portal:latest
+docker tag nutriai-backend:latest ${ACR_NAME}/nutriai-backend:latest
+docker tag nutriai-backend:latest ${ACR_NAME}/nutriai-backend:$(git rev-parse --short HEAD)
 
-# Push to ACR
-docker push acrnutriaiprod.azurecr.io/nutriai-health-portal:latest
+# Push
+docker push ${ACR_NAME}/nutriai-backend:latest
+docker push ${ACR_NAME}/nutriai-backend:$(git rev-parse --short HEAD)
 ```
 
-> [!TIP]
-> You can verify the image was pushed by going to **ACR → "Services" → "Repositories"** in the portal. You should see `nutriai-health-portal` listed.
-
----
-
-## Step 8: Create Azure App Service
-
-App Service hosts the web application.
-
-### Create the App Service Plan
-
-1. Search **"App Service plans"** → Click **"+ Create"**
-2. Fill in:
-   | Field | Value |
-   |-------|-------|
-   | Subscription | *Your subscription* |
-   | Resource group | `rg-nutriai-prod` |
-   | Name | `plan-nutriai-prod` |
-   | Operating System | **Linux** |
-   | Region | `East US` |
-   | Pricing plan | **Basic B2** *(or Standard S1 for production)* |
-3. Click **"Review + create"** → **"Create"**
-
-### Create the Web App
-
-4. Search **"App Services"** → Click **"+ Create"** → **"Web App"**
-5. **Basics** tab:
-   | Field | Value |
-   |-------|-------|
-   | Subscription | *Your subscription* |
-   | Resource group | `rg-nutriai-prod` |
-   | Name | `app-nutriai-prod` *(becomes app-nutriai-prod.azurewebsites.net)* |
-   | Publish | **Container** |
-   | Operating System | **Linux** |
-   | Region | `East US` |
-   | App Service Plan | `plan-nutriai-prod` |
-6. **Container** tab:
-   | Field | Value |
-   |-------|-------|
-   | Image Source | **Azure Container Registry** |
-   | Registry | `acrnutriaiprod` |
-   | Image | `nutriai-health-portal` |
-   | Tag | `latest` |
-7. Click **"Review + create"** → **"Create"**
-
-### Configure Environment Variables
-
-8. After deployment, go to the App Service resource
-9. Left menu → **"Settings"** → **"Environment variables"**
-10. Click **"+ Add"** for each of the following:
-
-| Name | Value |
-|------|-------|
-| `SECRET_KEY` | *A random 64-character string (generate at random.org)* |
-| `DATABASE_URL` | `postgresql://nutriai_admin:<PASSWORD>@psql-nutriai-prod.postgres.database.azure.com:5432/nutriai?sslmode=require` |
-| `AZURE_STORAGE_CONNECTION_STRING` | *Connection string from Step 3* |
-| `AZURE_STORAGE_CONTAINER_NAME` | `health-documents` |
-| `AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT` | *Endpoint from Step 6* |
-| `AZURE_DOCUMENT_INTELLIGENCE_KEY` | *Key from Step 6* |
-| `AZURE_OPENAI_ENDPOINT` | *Endpoint from Step 5* |
-| `AZURE_OPENAI_KEY` | *Key from Step 5* |
-| `AZURE_OPENAI_DEPLOYMENT_NAME` | `gpt-4` |
-| `AZURE_OPENAI_API_VERSION` | `2024-02-01` |
-| `AZURE_KEYVAULT_URL` | `https://kv-nutriai-prod.vault.azure.net` |
-| `WEBSITES_PORT` | `8000` |
-
-11. Click **"Apply"** at the bottom → **"Confirm"**
-
-> [!NOTE]
-> **If you skipped Key Vault (Step 2):** Remove the `AZURE_KEYVAULT_URL` row from the table above — you don't need it. All your secrets are already stored directly in these environment variables. The remaining variables in the table stay exactly the same.
-
-### Enable HTTPS Only
-
-12. Left menu → **"Settings"** → **"Configuration"**
-13. Under **"General settings"** tab:
-    - **HTTPS Only**: Toggle to **On**
-    - **Minimum TLS Version**: **1.2**
-14. Click **"Save"**
-
-### Enable Managed Identity (for Key Vault) *(Optional — skip if not using Key Vault)*
-
-> [!NOTE]
-> **If you skipped Key Vault (Step 2):** Skip steps 15–22 below entirely. Your secrets are already configured as environment variables above — no Managed Identity or Key Vault access grant is needed.
-
-15. Left menu → **"Settings"** → **"Identity"**
-16. Under **"System assigned"** tab:
-    - Status: Toggle to **On**
-17. Click **"Save"** → **"Yes"** to confirm
-18. Copy the **Object (principal) ID** that appears
-
-### Grant Key Vault Access to App Service *(Optional — skip if not using Key Vault)*
-
-19. Go back to your Key Vault (`kv-nutriai-prod`)
-20. Left menu → **"Access control (IAM)"**
-21. Click **"+ Add"** → **"Add role assignment"**
-    - Role: **Key Vault Secrets User**
-    - Members tab → **"+ Select members"** → Search for `app-nutriai-prod` → Select it
-22. Click **"Review + assign"**
-
-> [!IMPORTANT]
-> After configuring all settings, the App Service will automatically restart and pull the container image. Wait 2-3 minutes, then visit `https://app-nutriai-prod.azurewebsites.net` to verify.
-
----
-
-## Step 9: Create Azure Function App
-
-The Function App processes documents in the background and performs cleanup.
-
-### Create a Storage Account for Functions
-
-1. Search **"Storage accounts"** → Click **"+ Create"**
-2. Fill in:
-   | Field | Value |
-   |-------|-------|
-   | Resource group | `rg-nutriai-prod` |
-   | Storage account name | `stnutraifuncprod` |
-   | Region | `East US` |
-   | Performance | **Standard** |
-   | Redundancy | **LRS** |
-3. Click **"Review + create"** → **"Create"**
-
-### Create the Function App
-
-4. Search **"Function App"** → Click **"+ Create"** → Select **"Consumption"**
-5. **Basics** tab:
-   | Field | Value |
-   |-------|-------|
-   | Subscription | *Your subscription* |
-   | Resource group | `rg-nutriai-prod` |
-   | Function App name | `func-nutriai-prod` |
-   | Runtime stack | **Python** |
-   | Version | **3.11** |
-   | Region | `East US` |
-   | Operating System | **Linux** |
-6. **Storage** tab:
-   - Storage account: `stnutraifuncprod`
-7. Click **"Review + create"** → **"Create"**
-
-### Configure Function App Settings
-
-8. After deployment, go to the Function App resource
-9. Left menu → **"Settings"** → **"Environment variables"**
-10. Click **"+ Add"** for each:
-
-| Name | Value |
-|------|-------|
-| `DATABASE_URL` | *Same database URL from Step 4* |
-| `AZURE_STORAGE_CONNECTION_STRING` | *Connection string from Step 3* |
-| `AZURE_STORAGE_CONTAINER_NAME` | `health-documents` |
-| `AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT` | *Endpoint from Step 6* |
-| `AZURE_DOCUMENT_INTELLIGENCE_KEY` | *Key from Step 6* |
-
-11. Click **"Apply"** → **"Confirm"**
-
-### Deploy Function App Code
-
-On your local machine, install Azure Functions Core Tools and deploy:
+### Build and Push Frontend Image
 
 ```bash
-# Install Azure Functions Core Tools (if not already installed)
-npm install -g azure-functions-core-tools@4
+cd frontend/
 
-# Navigate to function app directory
-cd function_app
+docker build -t nutriai-frontend:latest .
 
-# Deploy to Azure
-func azure functionapp publish func-nutriai-prod --python
+docker tag nutriai-frontend:latest ${ACR_NAME}/nutriai-frontend:latest
+docker push ${ACR_NAME}/nutriai-frontend:latest
 ```
 
-### Get Function App URL and Key
+---
 
-12. In the portal, go to Function App → Left menu → **"Functions"**
-13. Click on **"process_documents"** function
-14. Click **"Get Function URL"** → Copy the URL (includes the function key)
-15. Go back to the App Service (`app-nutriai-prod`)
-16. **"Environment variables"** → Add:
+## 8. Backend Deployment
 
-| Name | Value |
-|------|-------|
-| `FUNCTION_APP_URL` | `https://func-nutriai-prod.azurewebsites.net` |
-| `FUNCTION_APP_KEY` | *The function key from the URL query parameter `?code=...`* |
+### App Service Configuration
 
-17. Click **"Apply"** → **"Confirm"**
+The backend runs all 8 microservices in a single container via supervisord. Terraform configures the App Service, but you can update settings:
+
+```bash
+APP_NAME="nutriai-prod-backend"
+
+# Verify deployment
+az webapp show --name $APP_NAME --resource-group nutriai-prod-rg --query state
+
+# View logs
+az webapp log tail --name $APP_NAME --resource-group nutriai-prod-rg
+
+# Restart
+az webapp restart --name $APP_NAME --resource-group nutriai-prod-rg
+
+# Check health
+curl https://${APP_NAME}.azurewebsites.net/health
+```
+
+### Environment Variables
+
+All environment variables are set by Terraform. To update manually:
+
+```bash
+az webapp config appsettings set \
+  --name $APP_NAME \
+  --resource-group nutriai-prod-rg \
+  --settings \
+    AZURE_OPENAI_KEY="new-key" \
+    JWT_SECRET_KEY="new-secret"
+```
+
+### Scaling
+
+```bash
+# Scale up (more powerful machine)
+az appservice plan update \
+  --name nutriai-prod-asp \
+  --resource-group nutriai-prod-rg \
+  --sku P1v3
+
+# Scale out (more instances)
+az webapp update \
+  --name $APP_NAME \
+  --resource-group nutriai-prod-rg \
+  --set siteConfig.numberOfWorkers=3
+```
 
 ---
 
-## Step 10: Register Microsoft Entra ID Application (SSO)
+## 9. Frontend Deployment
 
-This enables "Sign in with Microsoft" for your users.
+### Option A: Azure Static Web App (Recommended)
 
-1. Search **"Microsoft Entra ID"** (formerly Azure Active Directory) → Select it
-2. Left menu → **"App registrations"** → **"+ New registration"**
-3. Fill in:
-   | Field | Value |
-   |-------|-------|
-   | Name | `NutriAI Health Portal` |
-   | Supported account types | **Accounts in this organizational directory only** |
-   | Redirect URI (Web) | `https://app-nutriai-prod.azurewebsites.net/auth/callback` |
-4. Click **"Register"**
+```bash
+cd frontend/
 
-### Copy Application IDs
+# Build the React app
+npm install
+npm run build
 
-5. On the app's **Overview** page, copy:
-   - **Application (client) ID** → Save as `ENTRA_CLIENT_ID`
-   - **Directory (tenant) ID** → Save as `ENTRA_TENANT_ID`
+# Deploy using SWA CLI
+npm install -g @azure/static-web-apps-cli
 
-### Create a Client Secret
+swa deploy ./dist \
+  --deployment-token $(terraform output -raw static_web_app_api_key) \
+  --env production
+```
 
-6. Left menu → **"Certificates & secrets"** → **"Client secrets"** tab
-7. Click **"+ New client secret"**
-   | Field | Value |
-   |-------|-------|
-   | Description | `NutriAI Portal Secret` |
-   | Expires | **24 months** *(or your preference)* |
-8. Click **"Add"**
-9. **Immediately copy the "Value"** (not the Secret ID) — this is shown only once!
-   → Save as `ENTRA_CLIENT_SECRET`
+### Option B: Nginx Container on App Service
 
-### Configure API Permissions
+The frontend Dockerfile builds the React app and serves it via Nginx with API proxying:
 
-10. Left menu → **"API permissions"**
-11. Verify that **Microsoft Graph → User.Read** is already listed (it should be by default)
-12. If not, click **"+ Add a permission"** → **"Microsoft Graph"** → **"Delegated permissions"** → Check **"User.Read"** → **"Add permissions"**
+```bash
+docker build -t nutriai-frontend:latest .
+docker tag nutriai-frontend:latest ${ACR_NAME}/nutriai-frontend:latest
+docker push ${ACR_NAME}/nutriai-frontend:latest
+```
 
-### Update App Service Environment Variables
+### Option C: Azure CDN + Storage Account
 
-13. Go back to App Service → **"Environment variables"** → Add:
-
-| Name | Value |
-|------|-------|
-| `ENTRA_CLIENT_ID` | *Application (client) ID from step 5* |
-| `ENTRA_CLIENT_SECRET` | *Client secret value from step 9* |
-| `ENTRA_TENANT_ID` | *Directory (tenant) ID from step 5* |
-| `ENTRA_REDIRECT_URI` | `https://app-nutriai-prod.azurewebsites.net/auth/callback` |
-
-14. Click **"Apply"** → **"Confirm"**
+```bash
+# Upload build artifacts to blob storage
+az storage blob upload-batch \
+  --destination '$web' \
+  --source ./dist \
+  --account-name nutriaiprodfrontend \
+  --overwrite
+```
 
 ---
 
-## Step 11: Set Up Application Insights (Monitoring)
+## 10. Azure Function App (OCR)
 
-Application Insights provides logging, performance monitoring, and error tracking.
+The Function App processes uploaded documents using Azure Document Intelligence:
 
-1. Search **"Application Insights"** → Click **"+ Create"**
-2. **Basics** tab:
-   | Field | Value |
-   |-------|-------|
-   | Subscription | *Your subscription* |
-   | Resource group | `rg-nutriai-prod` |
-   | Name | `ai-nutriai-prod` |
-   | Region | `East US` |
-   | Resource Mode | **Workspace-based** |
-   | Log Analytics Workspace | **Create new** → Name: `law-nutriai-prod` → Click **"OK"** |
-3. Click **"Review + create"** → **"Create"**
+### Deploy Function Code
 
-### Connect to App Service
+```bash
+cd function-app/
 
-4. After deployment, go to the Application Insights resource
-5. On the **Overview** page, copy the **Connection String**
-6. Go to App Service → **"Environment variables"** → Add:
+# Install Azure Functions Core Tools
+npm install -g azure-functions-core-tools@4
 
-| Name | Value |
-|------|-------|
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | *Paste the connection string* |
+# Deploy
+func azure functionapp publish nutriai-prod-func --python
+```
 
-7. Click **"Apply"** → **"Confirm"**
+### Function App Structure
 
-### Connect to Function App
+```python
+# function_app.py
+import azure.functions as func
+from azure.ai.formrecognizer import DocumentAnalysisClient
 
-8. Go to Function App → **"Environment variables"** → Add the same connection string:
+app = func.FunctionApp()
 
-| Name | Value |
-|------|-------|
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | *Same connection string* |
+@app.function_name(name="ProcessDocument")
+@app.route(route="process-document", methods=["POST"])
+def process_document(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    1. Receives document_id and blob_name
+    2. Downloads blob from Azure Storage
+    3. Sends to Azure Document Intelligence for OCR
+    4. Updates document.ocr_content and ocr_status in database
+    """
+    # Implementation handles PDF/image OCR extraction
+    pass
+```
 
-9. Click **"Apply"** → **"Confirm"**
+### Verify Function App
 
----
+```bash
+# Check status
+az functionapp show \
+  --name nutriai-prod-func \
+  --resource-group nutriai-prod-rg \
+  --query state
 
-## Step 12: Configure Database Firewall for App Service
-
-Ensure your App Service can reach the PostgreSQL database.
-
-1. Go to your PostgreSQL Flexible Server (`psql-nutriai-prod`)
-2. Left menu → **"Settings"** → **"Networking"**
-3. Under **Firewall rules**, verify:
-   - ✅ **"Allow public access from any Azure service within Azure to this server"** is checked
-4. If you need to add specific IPs:
-   - Click **"+ Add current client IP address"** for portal access
-   - Add the App Service outbound IPs (found in App Service → **"Properties"** → **"Outbound IP addresses"**)
-5. Click **"Save"**
-
----
-
-## Step 13: Verify Deployment
-
-### Check App Service Logs
-
-1. Go to App Service → Left menu → **"Monitoring"** → **"Log stream"**
-2. Wait for logs to appear — you should see Gunicorn startup messages
-3. If you see errors, check:
-   - **"Diagnose and solve problems"** in the left menu
-   - **"Deployment Center"** → **"Logs"** tab for container pull issues
-
-### Test the Application
-
-4. Open your browser and navigate to:
-   - **Landing page**: `https://app-nutriai-prod.azurewebsites.net/`
-   - **Login page**: `https://app-nutriai-prod.azurewebsites.net/auth/login`
-   - **Register**: `https://app-nutriai-prod.azurewebsites.net/auth/register`
-   - **Help page**: `https://app-nutriai-prod.azurewebsites.net/help`
-
-5. Register a test user and verify:
-   - ✅ Dashboard loads with stats
-   - ✅ Document upload works (drag-and-drop)
-   - ✅ Profile page loads
-   - ✅ Health tracker renders with charts
-   - ✅ Microsoft SSO button redirects properly (if Entra ID is configured)
-
-### Check Function App
-
-6. Go to Function App → **"Functions"** in the left menu
-7. Verify both functions are listed:
-   - `process_documents` (HTTP trigger)
-   - `send_notifications` (Timer trigger)
-8. Click on each → **"Monitor"** to see execution history
+# Test invocation
+curl -X POST \
+  "https://nutriai-prod-func.azurewebsites.net/api/process-document" \
+  -H "x-functions-key: YOUR_FUNCTION_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"document_id": "test-id", "blob_name": "test.pdf"}'
+```
 
 ---
 
-## Step 14: Backups & Alerts (Recommended)
+## 11. Microsoft Entra ID (SSO)
 
-### Enable Database Backup
+### Terraform-Created App Registration
 
-1. Go to PostgreSQL Server → **"Settings"** → **"Backup"**
-2. Verify:
-   - Backup retention period: **14 days** (increase if needed)
-   - Geo-redundant backup: Enable for production
+Terraform creates the Entra ID app registration automatically. To configure manually:
 
-### Set Up Alerts
+```bash
+# Create app registration
+az ad app create \
+  --display-name "NutriAI Health Portal" \
+  --web-redirect-uris "https://nutriai-prod-backend.azurewebsites.net/auth/microsoft/callback" \
+  --required-resource-accesses '[{
+    "resourceAppId": "00000003-0000-0000-c000-000000000000",
+    "resourceAccess": [
+      {"id": "e1fe6dd8-ba31-4d61-89e7-88639da4683d", "type": "Scope"},
+      {"id": "64a6cdd6-aab1-4aaf-94b8-3cc8405e90d0", "type": "Scope"},
+      {"id": "14dad69e-099b-42c9-810b-d002981feec1", "type": "Scope"}
+    ]
+  }]'
+```
 
-3. Go to App Service → Left menu → **"Monitoring"** → **"Alerts"**
-4. Click **"+ Create"** → **"Alert rule"**
-5. **Condition**: Select **"CPU Percentage"** → Set threshold to **80%**
-6. **Actions**: Create an Action Group → Add your email for notifications
-7. **Details**: Name the rule `High CPU Alert`
-8. Click **"Review + create"** → **"Create"**
+### Required API Permissions
 
-### Enable Diagnostic Logging
+| Permission | Type | Description |
+|-----------|------|-------------|
+| User.Read | Delegated | Sign in and read user profile |
+| email | Delegated | View user's email address |
+| profile | Delegated | View user's basic profile |
 
-9. Go to App Service → **"Monitoring"** → **"App Service logs"**
-10. Configure:
-    | Setting | Value |
-    |---------|-------|
-    | Application logging (Filesystem) | **On** |
-    | Level | **Information** |
-    | Detailed error messages | **On** |
-    | Failed request tracing | **On** |
-    | Web server logging | **File System**, Retention: **7 days** |
-11. Click **"Save"**
+### Auth Service Configuration
 
----
+Set these environment variables on the backend:
 
-## 🔒 Security Checklist
-
-After deployment, verify all items:
-
-- [ ] `SECRET_KEY` is a strong random value (not the default)
-- [ ] All API keys stored in Azure Key Vault **or** in App Service Environment Variables
-- [ ] PostgreSQL is **not** publicly accessible (or restricted to Azure services only)
-- [ ] Storage account has **no public blob access**
-- [ ] **HTTPS Only** enabled on App Service
-- [ ] **Managed Identity** enabled for Key Vault access *(skip if not using Key Vault)*
-- [ ] Entra ID app registration has minimal permissions (User.Read only)
-- [ ] Application Insights monitoring is active
-- [ ] Database backup retention is at least 14 days
-- [ ] Docker container runs as non-root user
-- [ ] TLS 1.2 minimum enforced on all services
+```
+ENTRA_CLIENT_ID=<from az ad app list>
+ENTRA_CLIENT_SECRET=<from az ad app credential reset>
+ENTRA_TENANT_ID=<from az account show>
+ENTRA_REDIRECT_URI=https://your-backend.azurewebsites.net/auth/microsoft/callback
+```
 
 ---
 
-## 💰 Cost Estimation
+## 12. Service Bus Configuration
 
-| Service | SKU / Tier | Estimated Monthly Cost (USD) |
-|---------|-----------|------------------------------|
-| App Service Plan | Basic B2 (Linux) | ~$55 |
-| PostgreSQL Flexible Server | Burstable B2s | ~$25 |
-| Azure Storage | Standard LRS | ~$5 |
-| Azure OpenAI (GPT-4) | Standard | ~$20–100 (usage-based) |
-| Document Intelligence | Standard S0 | ~$50 (usage-based) |
-| Function App | Consumption | ~$0–5 |
-| Key Vault *(optional)* | Standard | ~$1 (free if skipped) |
-| Application Insights | Pay-as-you-go | ~$5–15 |
+### Topic and Subscription
+
+Terraform creates these automatically:
+
+- **Topic**: `meal-reminders`
+- **Subscription**: `email-sender` (max delivery count: 5)
+
+### Message Format
+
+Each meal reminder message contains:
+
+```json
+{
+  "user_id": "uuid",
+  "user_email": "patient@example.com",
+  "meal_type": "breakfast",
+  "foods_to_eat": [
+    {"food_name": "Oatmeal", "portion_size": "1 cup", "timing": "Morning"}
+  ],
+  "foods_to_avoid": [
+    {"food_name": "Peanuts", "reason": "Severe allergy", "risk_level": "high"}
+  ],
+  "day_name": "Monday",
+  "meal_description": "Steel-cut oatmeal with berries and honey"
+}
+```
+
+### Verify Service Bus
+
+```bash
+# Check namespace
+az servicebus namespace show \
+  --name nutriai-prod-sb \
+  --resource-group nutriai-prod-rg
+
+# Check topic
+az servicebus topic show \
+  --name meal-reminders \
+  --namespace-name nutriai-prod-sb \
+  --resource-group nutriai-prod-rg
+
+# Check subscription message count
+az servicebus topic subscription show \
+  --name email-sender \
+  --topic-name meal-reminders \
+  --namespace-name nutriai-prod-sb \
+  --resource-group nutriai-prod-rg \
+  --query countDetails
+```
+
+---
+
+## 13. Email Configuration
+
+### Option A: Gmail SMTP
+
+```bash
+# 1. Enable 2-Factor Authentication on Gmail
+# 2. Generate App Password: Google Account → Security → App passwords
+# 3. Set environment variables:
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=your-email@gmail.com
+SMTP_PASSWORD=xxxx-xxxx-xxxx-xxxx  # App password
+```
+
+### Option B: SendGrid
+
+```bash
+# 1. Create SendGrid account
+# 2. Generate API key
+EMAIL_PROVIDER=sendgrid
+SENDGRID_API_KEY=SG.xxxxxxxxxxxxx
+SENDGRID_FROM_EMAIL=noreply@nutriai-health.com
+```
+
+### Email Template
+
+The notification service sends styled HTML emails with:
+- NutriAI branded header (green-blue gradient)
+- Foods to eat table (green theme)
+- Foods to avoid table (red theme)
+- Call-to-action button linking to the portal
+
+---
+
+## 14. Monitoring & Alerts
+
+### Application Insights
+
+Terraform provisions Application Insights automatically. Connection string is injected into all services.
+
+```bash
+# View Application Insights
+az monitor app-insights component show \
+  --app nutriai-prod-monitor-appinsights \
+  --resource-group nutriai-prod-rg
+
+# Query logs (last 1 hour)
+az monitor app-insights query \
+  --app nutriai-prod-monitor-appinsights \
+  --resource-group nutriai-prod-rg \
+  --analytics-query "requests | where timestamp > ago(1h) | summarize count() by resultCode"
+```
+
+### Configured Alerts
+
+| Alert | Metric | Threshold | Severity |
+|-------|--------|-----------|----------|
+| High Response Time | HttpResponseTime (avg) | > 5 seconds | Warning |
+| High Error Rate | Http5xx (total) | > 10 in 15 min | Critical |
+| High CPU | CpuPercentage (avg) | > 80% | Warning |
+
+### Health Check Endpoints
+
+Every service exposes `/health`:
+
+```bash
+# Check all services
+curl https://nutriai-prod-backend.azurewebsites.net/health
+
+# Response
+{
+  "service": "api-gateway",
+  "status": "healthy",
+  "database": "connected",
+  "timestamp": "2026-06-08T18:00:00"
+}
+```
+
+### Log Access
+
+```bash
+# Stream logs
+az webapp log tail \
+  --name nutriai-prod-backend \
+  --resource-group nutriai-prod-rg
+
+# Download logs
+az webapp log download \
+  --name nutriai-prod-backend \
+  --resource-group nutriai-prod-rg \
+  --log-file logs.zip
+```
+
+---
+
+## 15. SSL/TLS & Custom Domain
+
+### Add Custom Domain
+
+```bash
+# Add custom domain
+az webapp config hostname add \
+  --webapp-name nutriai-prod-backend \
+  --resource-group nutriai-prod-rg \
+  --hostname api.nutriai-health.com
+
+# Create managed SSL certificate
+az webapp config ssl create \
+  --name nutriai-prod-backend \
+  --resource-group nutriai-prod-rg \
+  --hostname api.nutriai-health.com
+
+# Bind SSL
+az webapp config ssl bind \
+  --name nutriai-prod-backend \
+  --resource-group nutriai-prod-rg \
+  --certificate-thumbprint <THUMBPRINT> \
+  --ssl-type SNI
+```
+
+### DNS Configuration
+
+Add these DNS records:
+
+| Type | Name | Value |
+|------|------|-------|
+| CNAME | api | nutriai-prod-backend.azurewebsites.net |
+| CNAME | app | nutriai-prod-frontend.azurestaticapps.net |
+| TXT | asuid.api | verification-id-from-azure |
+
+---
+
+## 16. CI/CD Pipeline
+
+### GitHub Actions Workflow
+
+Create `.github/workflows/deploy.yml`:
+
+```yaml
+name: Deploy NutriAI
+
+on:
+  push:
+    branches: [main]
+
+env:
+  ACR_NAME: nutriaiprodacr
+  BACKEND_APP: nutriai-prod-backend
+
+jobs:
+  build-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Login to ACR
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ env.ACR_NAME }}.azurecr.io
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+      
+      - name: Build and Push
+        run: |
+          docker build -f Dockerfile.backend -t ${{ env.ACR_NAME }}.azurecr.io/nutriai-backend:${{ github.sha }} .
+          docker push ${{ env.ACR_NAME }}.azurecr.io/nutriai-backend:${{ github.sha }}
+      
+      - name: Deploy to App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.BACKEND_APP }}
+          images: ${{ env.ACR_NAME }}.azurecr.io/nutriai-backend:${{ github.sha }}
+
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      
+      - name: Build Frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+      
+      - name: Deploy to Static Web App
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.SWA_TOKEN }}
+          app_location: frontend
+          output_location: dist
+
+  terraform:
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+      
+      - name: Terraform Apply
+        run: |
+          cd terraform
+          terraform init
+          terraform apply -auto-approve
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+```
+
+### Required GitHub Secrets
+
+| Secret | Description |
+|--------|-------------|
+| `ACR_USERNAME` | ACR admin username |
+| `ACR_PASSWORD` | ACR admin password |
+| `SWA_TOKEN` | Static Web App deployment token |
+| `ARM_CLIENT_ID` | Azure service principal client ID |
+| `ARM_CLIENT_SECRET` | Azure service principal client secret |
+| `ARM_SUBSCRIPTION_ID` | Azure subscription ID |
+| `ARM_TENANT_ID` | Azure tenant ID |
+
+---
+
+## 17. Local Development
+
+### Docker Compose (Full Stack)
+
+```bash
+# Start everything
+docker compose up --build
+
+# Start specific services
+docker compose up postgres redis auth-service api-gateway frontend
+
+# View logs
+docker compose logs -f diet-service
+
+# Stop everything
+docker compose down
+
+# Stop and remove volumes
+docker compose down -v
+```
+
+### Individual Service Development
+
+```bash
+# Backend service (e.g., diet-service)
+cd services/diet-service
+python -m venv venv
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+pip install -r requirements.txt
+
+# Create .env file
+cat > .env << EOF
+DATABASE_URL=postgresql://nutriai_user:nutriai_password@localhost:5432/nutriai
+AZURE_OPENAI_ENDPOINT=https://your-endpoint.openai.azure.com
+AZURE_OPENAI_KEY=your-key
+AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4
+EOF
+
+# Run
+python main.py
+```
+
+```bash
+# Frontend
+cd frontend
+npm install
+npm run dev
+# Opens at http://localhost:3000 with API proxy to localhost:8000
+```
+
+### Environment Variables (.env)
+
+```bash
+# Database
+DATABASE_URL=postgresql://nutriai_user:nutriai_password@localhost:5432/nutriai
+
+# JWT
+JWT_SECRET_KEY=super-secret-jwt-key-for-development
+JWT_ALGORITHM=HS256
+JWT_EXPIRY_MINUTES=1440
+
+# Azure OpenAI
+AZURE_OPENAI_ENDPOINT=https://your-endpoint.openai.azure.com
+AZURE_OPENAI_KEY=your-key
+AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4
+AZURE_OPENAI_API_VERSION=2024-02-01
+
+# Azure Storage
+AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;...
+AZURE_STORAGE_CONTAINER_NAME=nutriai-documents
+
+# Azure Service Bus
+AZURE_SERVICE_BUS_CONNECTION_STRING=Endpoint=sb://...
+AZURE_SERVICE_BUS_TOPIC_NAME=meal-reminders
+
+# Function App (OCR)
+FUNCTION_APP_URL=https://your-func.azurewebsites.net
+FUNCTION_APP_KEY=your-function-key
+
+# Microsoft Entra ID
+ENTRA_CLIENT_ID=your-client-id
+ENTRA_CLIENT_SECRET=your-client-secret
+ENTRA_TENANT_ID=your-tenant-id
+ENTRA_REDIRECT_URI=http://localhost:8000/auth/microsoft/callback
+
+# Email
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=your-email@gmail.com
+SMTP_PASSWORD=your-app-password
+```
+
+---
+
+## 18. Troubleshooting
+
+### Common Issues
+
+#### 1. Database Connection Refused
+
+```bash
+# Check if PostgreSQL is running
+docker compose ps postgres
+
+# Check connection string
+echo $DATABASE_URL
+
+# Test connection
+psql "$DATABASE_URL" -c "SELECT 1"
+
+# In Azure: verify VNet integration and private DNS
+az network private-dns record-set list \
+  --zone-name nutriai-prod-vnet.private.postgres.database.azure.com \
+  --resource-group nutriai-prod-rg
+```
+
+#### 2. JWT Authentication Failures
+
+```bash
+# Check JWT_SECRET_KEY is same across all services
+# In Docker Compose, all services share the same env var
+# In Azure, verify App Service settings:
+az webapp config appsettings list \
+  --name nutriai-prod-backend \
+  --resource-group nutriai-prod-rg \
+  --query "[?name=='JWT_SECRET_KEY'].value"
+```
+
+#### 3. OpenAI API Errors
+
+```bash
+# Verify deployment exists
+az cognitiveservices account deployment list \
+  --name nutriai-prod-openai \
+  --resource-group nutriai-prod-rg
+
+# Check quota
+az cognitiveservices usage list \
+  --name nutriai-prod-openai \
+  --resource-group nutriai-prod-rg
+
+# Common error: "model_not_found" → deployment name mismatch
+# Common error: "rate_limit_exceeded" → increase capacity in Terraform
+```
+
+#### 4. Service Bus Messages Not Processing
+
+```bash
+# Check subscription has active messages
+az servicebus topic subscription show \
+  --name email-sender \
+  --topic-name meal-reminders \
+  --namespace-name nutriai-prod-sb \
+  --resource-group nutriai-prod-rg \
+  --query "countDetails"
+
+# Check dead-letter queue
+az servicebus topic subscription show \
+  --name email-sender \
+  --topic-name meal-reminders \
+  --namespace-name nutriai-prod-sb \
+  --resource-group nutriai-prod-rg \
+  --query "countDetails.deadLetterMessageCount"
+```
+
+#### 5. Frontend API 404 Errors
+
+```bash
+# Verify Vite proxy is configured (development):
+# vite.config.js → server.proxy → /api → http://localhost:8000
+
+# Verify Nginx proxy is configured (production):
+# nginx.conf → location /api/ → proxy_pass http://api-gateway:8000/
+```
+
+#### 6. OCR Not Processing
+
+```bash
+# Check Function App logs
+az functionapp log tail \
+  --name nutriai-prod-func \
+  --resource-group nutriai-prod-rg
+
+# Verify Function App has correct storage connection string
+# Verify Document Intelligence endpoint is accessible
+```
+
+### Health Check Commands
+
+```bash
+# Check all service health
+for port in 8000 8001 8002 8003 8004 8005 8006 8007; do
+  echo "Port $port: $(curl -s http://localhost:$port/health | jq -r '.status')"
+done
+
+# Docker Compose service status
+docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
+```
+
+---
+
+## 19. Operational Procedures
+
+### Backup Database
+
+```bash
+# Azure automated backups (configured: 7 days retention)
+
+# Manual backup
+pg_dump "$DATABASE_URL" > backup_$(date +%Y%m%d_%H%M%S).sql
+
+# Restore
+psql "$DATABASE_URL" < backup_20260608_120000.sql
+```
+
+### Update Application
+
+```bash
+# 1. Build new image
+docker build -f Dockerfile.backend -t nutriai-backend:v2 .
+
+# 2. Push to ACR
+docker tag nutriai-backend:v2 ${ACR_NAME}/nutriai-backend:v2
+docker push ${ACR_NAME}/nutriai-backend:v2
+
+# 3. Update App Service
+az webapp config container set \
+  --name nutriai-prod-backend \
+  --resource-group nutriai-prod-rg \
+  --docker-custom-image-name ${ACR_NAME}/nutriai-backend:v2
+
+# 4. Restart
+az webapp restart \
+  --name nutriai-prod-backend \
+  --resource-group nutriai-prod-rg
+```
+
+### Rollback
+
+```bash
+# Rollback to previous image
+az webapp config container set \
+  --name nutriai-prod-backend \
+  --resource-group nutriai-prod-rg \
+  --docker-custom-image-name ${ACR_NAME}/nutriai-backend:v1
+
+az webapp restart \
+  --name nutriai-prod-backend \
+  --resource-group nutriai-prod-rg
+```
+
+### Rotate Secrets
+
+```bash
+# 1. Generate new JWT secret
+NEW_SECRET=$(openssl rand -base64 48)
+
+# 2. Update Key Vault
+az keyvault secret set \
+  --vault-name nutriaiprodkv \
+  --name jwt-secret-key \
+  --value "$NEW_SECRET"
+
+# 3. Update App Service
+az webapp config appsettings set \
+  --name nutriai-prod-backend \
+  --resource-group nutriai-prod-rg \
+  --settings JWT_SECRET_KEY="$NEW_SECRET"
+
+# 4. Restart (invalidates existing tokens)
+az webapp restart \
+  --name nutriai-prod-backend \
+  --resource-group nutriai-prod-rg
+```
+
+### Destroy Infrastructure
+
+```bash
+cd terraform/
+
+# Preview destruction
+terraform plan -destroy
+
+# Destroy (CAUTION: irreversible)
+terraform destroy
+
+# Remove state backend
+az group delete --name nutriai-terraform-state --yes
+```
+
+---
+
+## 20. Cost Estimation
+
+### Monthly Cost Breakdown (Production)
+
+| Service | SKU | Est. Monthly Cost |
+|---------|-----|-------------------|
+| App Service (Backend) | B2 | ~$55 |
+| PostgreSQL Flexible Server | B_Standard_B1ms | ~$25 |
+| Azure OpenAI (GPT-4) | S0 + usage | ~$30-100 |
+| Storage Account | Standard LRS | ~$5 |
 | Container Registry | Basic | ~$5 |
-| **Total (Estimated)** | | **~$165–260/month** |
+| Service Bus | Standard | ~$10 |
+| Function App | Consumption | ~$0-5 |
+| Application Insights | Pay-as-you-go | ~$5-15 |
+| Static Web App | Standard | ~$9 |
+| Key Vault | Standard | ~$1 |
+| **Total** | | **~$145-230/mo** |
 
-> [!TIP]
-> **Save money**: Use [Azure Reservations](https://azure.microsoft.com/en-us/pricing/reservations/) for 1-year or 3-year commitments to save 30–50% on compute. For development/testing, use the **Free tier** App Service Plan (F1) and **Burstable B1ms** PostgreSQL.
+### Cost Optimization Tips
 
----
-
-## 🔧 Troubleshooting
-
-| Issue | Where to Check | Solution |
-|-------|---------------|----------|
-| App won't start | App Service → Deployment Center → Logs | Verify `WEBSITES_PORT=8000` is set; check Docker image |
-| "502 Bad Gateway" | App Service → Diagnose and solve problems | Container may have crashed — check Log stream |
-| Database connection refused | PostgreSQL → Networking | Add App Service outbound IPs to firewall rules |
-| OCR fails on upload | Function App → Functions → Monitor | Verify Document Intelligence key and endpoint |
-| SSO redirect error | Entra ID → App registrations → Redirect URIs | Ensure redirect URI matches exactly |
-| Function App not triggered | Function App → Functions → Monitor | Check function.json bindings and app settings |
-| Blob upload fails | Storage Account → Access keys | Verify connection string is correct |
-| "No module named..." | App Service → Log stream | Ensure all dependencies are in requirements.txt |
-
-### Viewing Live Logs
-
-1. **App Service**: Go to → **"Monitoring"** → **"Log stream"**
-2. **Function App**: Go to → **"Functions"** → Click function → **"Monitor"**
-3. **Application Insights**: Go to → **"Investigate"** → **"Failures"** or **"Performance"**
+1. **Dev/Staging**: Use B1 App Service and B_Standard_B1ms PostgreSQL
+2. **OpenAI**: Use `gpt-4o-mini` for lower-cost diet plan generation
+3. **Function App**: Consumption plan (pay per execution)
+4. **Monitoring**: Reduce Log Analytics retention to 7 days in non-prod
+5. **Reserved Instances**: 1-year reservation for 30-40% savings on App Service and PostgreSQL
 
 ---
 
-## 🔄 Updating the Application
-
-When you make code changes and want to redeploy:
-
-1. **Build and push new Docker image**:
-   ```bash
-   docker build -t nutriai-health-portal:latest .
-   docker tag nutriai-health-portal:latest acrnutriaiprod.azurecr.io/nutriai-health-portal:v2
-   docker push acrnutriaiprod.azurecr.io/nutriai-health-portal:v2
-   ```
-
-2. **Update App Service**:
-   - Go to App Service → **"Deployment Center"**
-   - Update the **Tag** to `v2`
-   - Click **"Save"**
-   - Or: Go to **"Overview"** → Click **"Restart"** (if using `latest` tag)
-
-3. **Update Function App**:
-   ```bash
-   cd function_app
-   func azure functionapp publish func-nutriai-prod --python
-   ```
-
----
-
-## 📋 Complete Environment Variables Summary
-
-### App Service (`app-nutriai-prod`)
-
-| Variable | Source |
-|----------|--------|
-| `SECRET_KEY` | Self-generated random string |
-| `DATABASE_URL` | Step 4 (PostgreSQL connection string) |
-| `AZURE_STORAGE_CONNECTION_STRING` | Step 3 (Storage access keys) |
-| `AZURE_STORAGE_CONTAINER_NAME` | `health-documents` |
-| `AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT` | Step 6 (DI Keys and Endpoint) |
-| `AZURE_DOCUMENT_INTELLIGENCE_KEY` | Step 6 (DI Keys and Endpoint) |
-| `AZURE_OPENAI_ENDPOINT` | Step 5 (OpenAI Keys and Endpoint) |
-| `AZURE_OPENAI_KEY` | Step 5 (OpenAI Keys and Endpoint) |
-| `AZURE_OPENAI_DEPLOYMENT_NAME` | `gpt-4` |
-| `AZURE_OPENAI_API_VERSION` | `2024-02-01` |
-| `AZURE_KEYVAULT_URL` | Step 2 (Key Vault URI) — *omit if not using Key Vault* |
-| `ENTRA_CLIENT_ID` | Step 10 (App registration) |
-| `ENTRA_CLIENT_SECRET` | Step 10 (App registration) |
-| `ENTRA_TENANT_ID` | Step 10 (App registration) |
-| `ENTRA_REDIRECT_URI` | `https://app-nutriai-prod.azurewebsites.net/auth/callback` |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Step 11 (Application Insights) |
-| `FUNCTION_APP_URL` | Step 9 (Function App URL) |
-| `FUNCTION_APP_KEY` | Step 9 (Function key) |
-| `WEBSITES_PORT` | `8000` |
-
-### Function App (`func-nutriai-prod`)
-
-| Variable | Source |
-|----------|--------|
-| `DATABASE_URL` | Step 4 |
-| `AZURE_STORAGE_CONNECTION_STRING` | Step 3 |
-| `AZURE_STORAGE_CONTAINER_NAME` | `health-documents` |
-| `AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT` | Step 6 |
-| `AZURE_DOCUMENT_INTELLIGENCE_KEY` | Step 6 |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Step 11 |
-
----
-
-<p align="center">
-  📖 For application details, see the <a href="README.md">README</a>
-</p>
+<div align="center">
+  <b>🏥 NutriAI Health Portal — Deployment Guide</b><br>
+  <sub>Last updated: June 2026</sub>
+</div>

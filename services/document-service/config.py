@@ -1,0 +1,29 @@
+"""
+Document Service - Configuration
+"""
+
+from pydantic_settings import BaseSettings
+from functools import lru_cache
+
+
+class Settings(BaseSettings):
+    APP_NAME: str = "NutriAI Document Service"
+    DATABASE_URL: str = "postgresql://nutriai_user:nutriai_password@localhost:5432/nutriai"
+
+    AZURE_STORAGE_CONNECTION_STRING: str = ""
+    AZURE_STORAGE_CONTAINER_NAME: str = "health-documents"
+
+    FUNCTION_APP_URL: str = "http://localhost:7071"
+    FUNCTION_APP_KEY: str = ""
+
+    APPLICATIONINSIGHTS_CONNECTION_STRING: str = ""
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = True
+
+
+@lru_cache()
+def get_settings() -> Settings:
+    return Settings()

@@ -1,0 +1,34 @@
+# ============================================================
+# NutriAI Terraform Variables - Example
+# Copy to terraform.tfvars and fill in values
+# ============================================================
+
+project_name = "nutriai"
+environment  = "prod"
+location     = "eastus"
+
+admin_email = "admin@example.com"
+
+# Microsoft Entra ID (Azure AD) - for SSO
+entra_client_id     = ""
+entra_client_secret = ""
+entra_tenant_id     = ""
+
+# OpenAI
+openai_model_deployment = "gpt-4"
+
+# Email (SMTP)
+smtp_host     = "smtp.gmail.com"
+smtp_port     = 587
+smtp_username = ""
+smtp_password = ""
+
+# SKUs
+app_service_sku = "B2"
+postgres_sku    = "B_Standard_B1ms"
+
+tags = {
+  Project     = "NutriAI"
+  ManagedBy   = "Terraform"
+  Application = "NutriAI Health Portal"
+}
