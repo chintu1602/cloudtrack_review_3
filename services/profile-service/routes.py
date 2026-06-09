@@ -2,7 +2,7 @@
 Profile Service - API Routes
 """
 import logging
-from typing import Optional, List
+from typing import Optional, List, Any, Union
 
 from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import JSONResponse
@@ -27,7 +27,7 @@ class ProfileUpdateRequest(BaseModel):
 
 
 class MedicalUpdateRequest(BaseModel):
-    medical_conditions: List[str] = []
+    medical_conditions: Any = []  # Accepts dict {conditions: [...], other: "..."} or List[str]
     dietary_preferences: List[str] = []
 
 
@@ -131,12 +131,30 @@ async def update_medical(payload: MedicalUpdateRequest, request: Request, db: Se
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
+        # Normalize medical_conditions into {conditions: [...], other: "..."} format
+        mc = payload.medical_conditions
+        if isinstance(mc, dict):
+            conditions = mc.get("conditions", [])
+            other_text = mc.get("other", "")
+            # Validate: if "None" is selected, it must be the only entry
+            if "None" in conditions and len(conditions) > 1:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "If 'None' is selected, no other conditions can be chosen."}
+                )
+            medical_data = {"conditions": conditions, "other": other_text}
+        elif isinstance(mc, list):
+            # Backward compatibility: convert old array format
+            medical_data = {"conditions": mc, "other": ""}
+        else:
+            medical_data = {"conditions": [], "other": ""}
+
         profile = db.query(PatientProfile).filter(PatientProfile.user_id == user_id).first()
         if not profile:
-            profile = PatientProfile(user_id=user_id, medical_conditions=[], dietary_preferences=[])
+            profile = PatientProfile(user_id=user_id, medical_conditions={}, dietary_preferences=[])
             db.add(profile)
 
-        profile.medical_conditions = payload.medical_conditions
+        profile.medical_conditions = medical_data
         profile.dietary_preferences = payload.dietary_preferences
         db.commit()
         return {"message": "Medical information updated successfully"}

@@ -5,7 +5,7 @@ import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 
 export default function Register() {
-  const { register, showFlash } = useAuth()
+  const { register, microsoftLogin, showFlash } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState({ email: '', username: '', password: '', confirm_password: '', full_name: '', age: '', gender: '', weight: '', height: '' })
   const [loading, setLoading] = useState(false)
@@ -27,6 +27,15 @@ export default function Register() {
     }
   }
 
+  const handleMicrosoft = async () => {
+    try {
+      const authUrl = await microsoftLogin()
+      if (authUrl) window.location.href = authUrl
+    } catch {
+      setErrors(['Failed to initiate Microsoft registration.'])
+    }
+  }
+
   const update = (field, value) => setForm(prev => ({ ...prev, [field]: value }))
 
   return (
@@ -44,6 +53,13 @@ export default function Register() {
             {errors.length > 0 && (
               <div className="alert alert-danger">{errors.map((e, i) => <div key={i}><i className="fas fa-exclamation-circle me-2"></i>{e}</div>)}</div>
             )}
+
+            <button className="btn-microsoft" onClick={handleMicrosoft}>
+              <svg width="20" height="20" viewBox="0 0 21 21"><rect x="1" y="1" width="9" height="9" fill="#F25022"/><rect x="11" y="1" width="9" height="9" fill="#7FBA00"/><rect x="1" y="11" width="9" height="9" fill="#00A4EF"/><rect x="11" y="11" width="9" height="9" fill="#FFB900"/></svg>
+              Register with Microsoft
+            </button>
+
+            <div className="auth-divider"><span>OR</span></div>
 
             <form onSubmit={handleSubmit}>
               <div className="row g-3">

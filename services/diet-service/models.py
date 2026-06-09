@@ -55,6 +55,18 @@ class FoodAllergy(Base):
     notes = Column(Text, nullable=True)
 
 
+class PatientProfile(Base):
+    """Read-only reference for medical conditions and dietary preferences."""
+    __tablename__ = "patient_profiles"
+
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    user_id = Column(UUID(as_uuid=True), nullable=False)
+    medical_conditions = Column(JSON, default=dict)
+    dietary_preferences = Column(JSON, default=list)
+    blood_type = Column(String(10))
+    emergency_contact = Column(String(255))
+
+
 class User(Base):
     """Read-only reference for user email (for meal reminders)."""
     __tablename__ = "users"

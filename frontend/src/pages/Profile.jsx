@@ -5,26 +5,85 @@ import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import LoadingSpinner from '../components/LoadingSpinner'
 
+const MEDICAL_CONDITIONS = [
+  'Diabetes Type 1', 'Diabetes Type 2', 'Pre-Diabetes',
+  'Hypertension (High Blood Pressure)', 'Hypotension (Low Blood Pressure)',
+  'High Cholesterol', 'Heart Disease', 'Kidney Disease', 'Liver Disease',
+  'Thyroid Disorder (Hypothyroidism)', 'Thyroid Disorder (Hyperthyroidism)',
+  'PCOS / PCOD', 'Anemia', 'Obesity', 'Underweight',
+  'Acid Reflux / GERD', 'Irritable Bowel Syndrome (IBS)', 'Celiac Disease',
+  'Lactose Intolerance', 'Asthma', 'Arthritis', 'Osteoporosis',
+  'Cancer (in treatment)', 'Pregnancy', 'Breastfeeding', 'None',
+]
+
+const DIETARY_PREFERENCES = [
+  'Vegetarian', 'Vegan', 'Pescatarian', 'Non-Vegetarian', 'Eggetarian',
+  'Gluten-Free', 'Dairy-Free', 'Keto', 'Low-Carb', 'Low-Sodium',
+  'Diabetic-Friendly', 'Heart-Healthy', 'Halal', 'Kosher', 'Jain',
+]
+
 export default function Profile() {
   const { user: authUser, fetchUser } = useAuth()
-  const [profile, setProfile] = useState(null)
   const [allergies, setAllergies] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({})
-  const [medForm, setMedForm] = useState({ medical_conditions: '', dietary_preferences: '' })
+  const [selectedConditions, setSelectedConditions] = useState([])
+  const [otherCondition, setOtherCondition] = useState('')
+  const [selectedPreferences, setSelectedPreferences] = useState([])
   const [allergyForm, setAllergyForm] = useState({ allergen_name: '', severity: 'moderate', notes: '' })
 
   useEffect(() => {
     api.get('/profile').then(res => {
       const d = res.data
-      setProfile(d.profile)
       setAllergies(d.allergies)
-      setForm({ full_name: d.user.full_name, age: d.user.age || '', gender: d.user.gender || '', weight: d.user.weight || '', height: d.user.height || '', blood_type: d.profile?.blood_type || '', emergency_contact: d.profile?.emergency_contact || '' })
-      setMedForm({ medical_conditions: (d.profile?.medical_conditions || []).join(', '), dietary_preferences: (d.profile?.dietary_preferences || []).join(', ') })
+      setForm({
+        full_name: d.user.full_name, age: d.user.age || '', gender: d.user.gender || '',
+        weight: d.user.weight || '', height: d.user.height || '',
+        blood_type: d.profile?.blood_type || '', emergency_contact: d.profile?.emergency_contact || '',
+      })
+
+      // Parse medical_conditions — supports both old array format and new object format
+      const mc = d.profile?.medical_conditions
+      if (mc && typeof mc === 'object' && !Array.isArray(mc)) {
+        setSelectedConditions(mc.conditions || [])
+        setOtherCondition(mc.other || '')
+      } else if (Array.isArray(mc)) {
+        setSelectedConditions(mc)
+      }
+
+      // Parse dietary_preferences
+      const dp = d.profile?.dietary_preferences
+      if (Array.isArray(dp)) {
+        setSelectedPreferences(dp)
+      }
     }).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
+  // --- Condition checkbox logic ---
+  const toggleCondition = (condition) => {
+    if (condition === 'None') {
+      setSelectedConditions(prev => prev.includes('None') ? [] : ['None'])
+    } else {
+      setSelectedConditions(prev => {
+        const without = prev.filter(c => c !== 'None')
+        return without.includes(condition)
+          ? without.filter(c => c !== condition)
+          : [...without, condition]
+      })
+    }
+  }
+
+  const isNoneSelected = selectedConditions.includes('None')
+
+  // --- Dietary preference checkbox logic ---
+  const togglePreference = (pref) => {
+    setSelectedPreferences(prev =>
+      prev.includes(pref) ? prev.filter(p => p !== pref) : [...prev, pref]
+    )
+  }
+
+  // --- Save handlers ---
   const handleProfileSave = async (e) => {
     e.preventDefault(); setSaving(true)
     try {
@@ -35,11 +94,17 @@ export default function Profile() {
     } catch {} finally { setSaving(false) }
   }
 
-  const handleMedicalSave = async (e) => {
-    e.preventDefault(); setSaving(true)
+  const handleMedicalSave = async () => {
+    setSaving(true)
     try {
-      await api.post('/profile/medical', { medical_conditions: medForm.medical_conditions.split(',').map(s => s.trim()).filter(Boolean), dietary_preferences: medForm.dietary_preferences.split(',').map(s => s.trim()).filter(Boolean) })
-      alert('Medical info updated!')
+      await api.post('/profile/medical', {
+        medical_conditions: {
+          conditions: selectedConditions,
+          other: otherCondition.trim(),
+        },
+        dietary_preferences: selectedPreferences,
+      })
+      alert('Medical info and dietary preferences saved!')
     } catch {} finally { setSaving(false) }
   }
 
@@ -72,8 +137,9 @@ export default function Profile() {
           <div className="mb-4"><h3 className="fw-bold"><i className="fas fa-user-edit text-primary-green me-2"></i>My Profile</h3><p className="text-muted">Manage your personal and medical information</p></div>
 
           <div className="row g-4">
-            {/* Left Column */}
+            {/* ==================== LEFT COLUMN ==================== */}
             <div className="col-lg-6">
+              {/* Personal Information */}
               <div className="profile-section">
                 <h5 className="fw-bold mb-3"><i className="fas fa-user text-primary-green me-2"></i>Personal Information</h5>
                 <form onSubmit={handleProfileSave}>
@@ -90,18 +156,7 @@ export default function Profile() {
                 </form>
               </div>
 
-              <div className="profile-section">
-                <h5 className="fw-bold mb-3"><i className="fas fa-notes-medical text-secondary-blue me-2"></i>Medical Information</h5>
-                <form onSubmit={handleMedicalSave}>
-                  <div className="mb-3"><label className="form-label-nutriai">Medical Conditions (comma separated)</label><input className="form-control form-control-nutriai" placeholder="e.g., Type 2 Diabetes, Hypertension" value={medForm.medical_conditions} onChange={e => setMedForm({ ...medForm, medical_conditions: e.target.value })} /></div>
-                  <div className="mb-3"><label className="form-label-nutriai">Dietary Preferences (comma separated)</label><input className="form-control form-control-nutriai" placeholder="e.g., Vegetarian, Low-sodium" value={medForm.dietary_preferences} onChange={e => setMedForm({ ...medForm, dietary_preferences: e.target.value })} /></div>
-                  <button type="submit" className="btn btn-nutriai-secondary w-100" disabled={saving}><i className="fas fa-save me-2"></i>Update Medical Info</button>
-                </form>
-              </div>
-            </div>
-
-            {/* Right Column - Allergies */}
-            <div className="col-lg-6">
+              {/* Food Allergies */}
               <div className="profile-section">
                 <h5 className="fw-bold mb-3"><i className="fas fa-allergies text-danger me-2"></i>Food Allergies</h5>
                 <div className="d-flex flex-wrap gap-2 mb-3">
@@ -124,6 +179,7 @@ export default function Profile() {
                 </form>
               </div>
 
+              {/* Account Info */}
               <div className="profile-section">
                 <h5 className="fw-bold mb-3"><i className="fas fa-info-circle text-primary-green me-2"></i>Account Info</h5>
                 <div className="row g-2">
@@ -133,6 +189,109 @@ export default function Profile() {
                   <div className="col-6"><small className="text-muted">Member Since</small><p className="fw-600 mb-0">{authUser?.created_at ? new Date(authUser.created_at).toLocaleDateString() : '-'}</p></div>
                 </div>
               </div>
+            </div>
+
+            {/* ==================== RIGHT COLUMN ==================== */}
+            <div className="col-lg-6">
+              {/* Medical / Diagnostic Conditions */}
+              <div className="profile-section">
+                <h5 className="fw-bold mb-3"><i className="fas fa-stethoscope text-secondary-blue me-2"></i>Medical / Diagnostic Conditions</h5>
+                <p className="text-muted mb-3" style={{ fontSize: '0.88rem' }}>Select all conditions that apply to you</p>
+                <div className="row g-0">
+                  {MEDICAL_CONDITIONS.map(condition => {
+                    const isChecked = selectedConditions.includes(condition)
+                    const isDisabled = isNoneSelected && condition !== 'None'
+                    return (
+                      <div key={condition} className="col-md-6">
+                        <div
+                          className="checkbox-item"
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: '8px',
+                            transition: 'background 0.2s',
+                            cursor: isDisabled ? 'not-allowed' : 'pointer',
+                            background: isChecked ? 'rgba(46, 125, 50, 0.08)' : 'transparent',
+                            opacity: isDisabled ? 0.45 : 1,
+                          }}
+                          onMouseEnter={e => { if (!isDisabled && !isChecked) e.currentTarget.style.background = 'rgba(46, 125, 50, 0.05)' }}
+                          onMouseLeave={e => { if (!isChecked) e.currentTarget.style.background = 'transparent' }}
+                        >
+                          <div className="form-check">
+                            <input
+                              className="form-check-input"
+                              type="checkbox"
+                              id={`cond-${condition}`}
+                              checked={isChecked}
+                              disabled={isDisabled}
+                              onChange={() => toggleCondition(condition)}
+                              style={{ borderColor: isChecked ? '#2E7D32' : undefined, backgroundColor: isChecked ? '#2E7D32' : undefined, transition: 'all 0.2s' }}
+                            />
+                            <label className="form-check-label" htmlFor={`cond-${condition}`} style={{ cursor: isDisabled ? 'not-allowed' : 'pointer', fontSize: '0.9rem' }}>
+                              {condition}
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="mt-3">
+                  <label className="form-label-nutriai">Other conditions not listed above</label>
+                  <input
+                    className="form-control form-control-nutriai"
+                    placeholder="e.g., Crohn's Disease, Food Sensitivities..."
+                    value={otherCondition}
+                    onChange={e => setOtherCondition(e.target.value)}
+                    disabled={isNoneSelected}
+                  />
+                </div>
+              </div>
+
+              {/* Dietary Preferences */}
+              <div className="profile-section">
+                <h5 className="fw-bold mb-3"><i className="fas fa-utensils text-primary-green me-2"></i>Dietary Preferences</h5>
+                <p className="text-muted mb-3" style={{ fontSize: '0.88rem' }}>Select all dietary preferences you follow</p>
+                <div className="row g-0">
+                  {DIETARY_PREFERENCES.map(pref => {
+                    const isChecked = selectedPreferences.includes(pref)
+                    return (
+                      <div key={pref} className="col-md-6 col-lg-4">
+                        <div
+                          className="checkbox-item"
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: '8px',
+                            transition: 'background 0.2s',
+                            cursor: 'pointer',
+                            background: isChecked ? 'rgba(46, 125, 50, 0.08)' : 'transparent',
+                          }}
+                          onMouseEnter={e => { if (!isChecked) e.currentTarget.style.background = 'rgba(46, 125, 50, 0.05)' }}
+                          onMouseLeave={e => { if (!isChecked) e.currentTarget.style.background = 'transparent' }}
+                        >
+                          <div className="form-check">
+                            <input
+                              className="form-check-input"
+                              type="checkbox"
+                              id={`pref-${pref}`}
+                              checked={isChecked}
+                              onChange={() => togglePreference(pref)}
+                              style={{ borderColor: isChecked ? '#2E7D32' : undefined, backgroundColor: isChecked ? '#2E7D32' : undefined, transition: 'all 0.2s' }}
+                            />
+                            <label className="form-check-label" htmlFor={`pref-${pref}`} style={{ cursor: 'pointer', fontSize: '0.9rem' }}>
+                              {pref}
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Save All Medical & Preferences */}
+              <button className="btn btn-nutriai-primary w-100" onClick={handleMedicalSave} disabled={saving}>
+                {saving ? <><span className="spinner-border spinner-border-sm me-2"></span>Saving...</> : <><i className="fas fa-save me-2"></i>Save Medical Info &amp; Dietary Preferences</>}
+              </button>
             </div>
           </div>
         </div>

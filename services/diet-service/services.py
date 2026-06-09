@@ -21,7 +21,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from sqlalchemy.orm import Session
 
 from config import get_settings
-from models import Document, DietPlan, FoodAllergy, User
+from models import Document, DietPlan, FoodAllergy, User, PatientProfile
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -50,7 +50,13 @@ def truncate_to_tokens(text: str, max_tokens: int = 4000) -> str:
     return truncated + "\n\n[Content truncated due to length]"
 
 
-def build_system_prompt(allergies: list, enhanced: bool = False) -> str:
+def build_system_prompt(
+    allergies: list,
+    medical_conditions: dict = None,
+    dietary_preferences: list = None,
+    enhanced: bool = False,
+) -> str:
+    # --- Allergy section ---
     allergy_section = ""
     if allergies:
         allergy_section = "\n\n⚠️ CRITICAL PATIENT ALLERGIES - NEVER RECOMMEND THESE FOODS:\n"
@@ -65,6 +71,36 @@ def build_system_prompt(allergies: list, enhanced: bool = False) -> str:
         allergy_section += "Include specific allergy warnings in the allergy_notes field."
     else:
         allergy_section = "\n\nNo known food allergies reported for this patient."
+
+    # --- Medical conditions section ---
+    conditions_section = ""
+    if medical_conditions:
+        conditions_list = []
+        if isinstance(medical_conditions, dict):
+            conditions_list = medical_conditions.get("conditions", [])
+            other_text = medical_conditions.get("other", "")
+            if other_text:
+                conditions_list = list(conditions_list) + [other_text]
+        elif isinstance(medical_conditions, list):
+            conditions_list = medical_conditions
+
+        # Filter out "None"
+        conditions_list = [c for c in conditions_list if c and c != "None"]
+
+        if conditions_list:
+            conditions_section = f"""\n\n🏥 PATIENT MEDICAL CONDITIONS:
+The patient has the following medical conditions: {', '.join(conditions_list)}.
+You MUST tailor recommendations for the medical conditions (e.g., if diabetic, suggest low-glycemic foods;
+if hypertensive, recommend low-sodium options; if pregnant, ensure adequate folic acid and iron)."""
+
+    # --- Dietary preferences section ---
+    preferences_section = ""
+    if dietary_preferences and len(dietary_preferences) > 0:
+        preferences_section = f"""\n\n🍽️ PATIENT DIETARY PREFERENCES:
+The patient follows these dietary preferences: {', '.join(dietary_preferences)}.
+You MUST respect ALL dietary preferences (e.g., if vegetarian, do not recommend meat, poultry, or fish;
+if vegan, exclude all animal products; if halal or kosher, ensure all foods comply with those requirements;
+if keto, focus on high-fat low-carb options). Violating dietary preferences is NOT acceptable."""
 
     enhanced_instruction = ""
     if enhanced:
@@ -81,6 +117,8 @@ Your role is to analyze patient medical documents (lab reports, prescriptions, e
 safe, and medically-appropriate diet plans.
 
 {allergy_section}
+{conditions_section}
+{preferences_section}
 {enhanced_instruction}
 
 You MUST respond with valid JSON in the following exact structure:
@@ -142,6 +180,8 @@ Guidelines:
 6. Provide practical, actionable advice that patients can easily follow.
 7. Include all 7 days (monday through sunday) in the weekly meal plan.
 8. Each day must have breakfast, lunch, dinner, and snacks.
+9. Respect all dietary preferences — never include foods that violate them.
+10. Tailor nutritional guidelines based on the patient's medical conditions.
 """
     return system_prompt
 
@@ -193,10 +233,13 @@ def validate_diet_plan_json(data: dict) -> bool:
 def generate_diet_plan_ai(
     ocr_content: str,
     allergies: list,
+    medical_conditions: dict = None,
+    dietary_preferences: list = None,
     additional_notes: Optional[str] = None,
 ) -> Optional[dict]:
     """
     Generate a diet plan with up to 3 attempts (retry with enhanced prompt).
+    Now includes medical conditions and dietary preferences in the prompt.
     """
     client = get_openai_client()
     truncated_content = truncate_to_tokens(ocr_content, max_tokens=4000)
@@ -204,7 +247,12 @@ def generate_diet_plan_ai(
     for attempt in range(3):
         try:
             enhanced = attempt > 0
-            system_prompt = build_system_prompt(allergies, enhanced=enhanced)
+            system_prompt = build_system_prompt(
+                allergies,
+                medical_conditions=medical_conditions,
+                dietary_preferences=dietary_preferences,
+                enhanced=enhanced,
+            )
 
             user_message = f"""Please analyze the following medical document content and generate a personalized diet plan.
 
@@ -385,10 +433,17 @@ def create_diet_plan(
             for a in allergies
         ]
 
+        # Fetch patient profile for medical conditions and dietary preferences
+        patient_profile = db.query(PatientProfile).filter(PatientProfile.user_id == user_id).first()
+        medical_conditions = patient_profile.medical_conditions if patient_profile else None
+        dietary_preferences = patient_profile.dietary_preferences if patient_profile else None
+
         # Generate with AI (with retry/validation)
         plan_data = generate_diet_plan_ai(
             ocr_content=combined_ocr,
             allergies=allergy_list,
+            medical_conditions=medical_conditions,
+            dietary_preferences=dietary_preferences,
             additional_notes=additional_notes,
         )
 
