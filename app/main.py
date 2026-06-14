@@ -64,8 +64,11 @@ app.include_router(admin.router)
 async def startup_event():
     """Create database tables on startup and start background tasks."""
     logger.info("Starting NutriAI Health Portal...")
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables created/verified.")
+    try:
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables created/verified.")
+    except Exception as e:
+        logger.warning(f"Database table creation check encountered an error (tables may already exist): {e}")
     asyncio.create_task(periodic_document_cleanup())
     logger.info("Background document cleanup task started.")
     asyncio.create_task(service_bus_consumer())

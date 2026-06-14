@@ -22,8 +22,11 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Auth Service starting...")
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables verified.")
+    try:
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables verified.")
+    except Exception as e:
+        logger.warning(f"Database table creation check encountered an error (tables may already exist): {e}")
     yield
     logger.info("Auth Service shutting down...")
 
