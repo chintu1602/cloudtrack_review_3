@@ -19,9 +19,22 @@ def get_blob_service_client() -> BlobServiceClient:
 
 
 def upload_document(file_content: bytes, original_filename: str, content_type: str) -> dict:
+    if not settings.AZURE_STORAGE_CONNECTION_STRING:
+        logger.error("AZURE_STORAGE_CONNECTION_STRING is not set in the environment variables.")
+        raise ValueError("Azure Storage connection string is missing or empty. Please check your .env configuration.")
+
     try:
         blob_service_client = get_blob_service_client()
         container_client = blob_service_client.get_container_client(settings.AZURE_STORAGE_CONTAINER_NAME)
+
+        # Auto-create the container if it does not exist
+        try:
+            container_client.create_container()
+            logger.info(f"Created Azure Storage container: '{settings.AZURE_STORAGE_CONTAINER_NAME}'")
+        except Exception as ex:
+            # If the container already exists, Azure returns ContainerAlreadyExists which we can safely ignore
+            if "ContainerAlreadyExists" not in str(ex):
+                logger.debug(f"Container check/creation details: {ex}")
 
         file_extension = original_filename.rsplit(".", 1)[-1] if "." in original_filename else ""
         blob_name = f"{uuid.uuid4()}.{file_extension}"
