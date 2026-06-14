@@ -6,7 +6,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 
-from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions
+from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions, ContentSettings
 
 from config import get_settings
 
@@ -59,7 +59,7 @@ def upload_document(file_content: bytes, original_filename: str, content_type: s
         blob_client = container_client.get_blob_client(blob_name)
         blob_client.upload_blob(
             file_content,
-            content_settings={"content_type": content_type},
+            content_settings=ContentSettings(content_type=content_type),
             overwrite=True,
         )
 
