@@ -27,10 +27,48 @@ def process_document_ocr(document_id: str, blob_name: str):
     Background task: download blob, run OCR, update database.
     """
     from database import SessionLocal
+    db = SessionLocal()
+
+    # Check if we should run in mock mode
+    conn_str = settings.AZURE_STORAGE_CONNECTION_STRING
+    ocr_key = settings.AZURE_DOCUMENT_INTELLIGENCE_KEY
+    is_mock = (
+        not conn_str or conn_str == "" or "base64" in conn_str or "your-" in conn_str or conn_str.startswith("<") or
+        not ocr_key or ocr_key == "" or ocr_key.startswith("<")
+    )
+
+    if is_mock:
+        logger.warning(f"Running OCR background task in MOCK mode for document: {document_id}")
+        import time
+        time.sleep(2) # Simulate processing delay
+        extracted_text = (
+            "Lab Report Analysis (Local Mock Mode)\n\n"
+            "Patient Health Metrics Summary:\n"
+            "- Heart Rate: 72 bpm (Normal)\n"
+            "- Blood Pressure: 120/80 mmHg (Optimal)\n"
+            "- Blood Sugar: 95 mg/dL (Normal)\n"
+            "- Cholesterol: 185 mg/dL (Desirable)\n"
+            "- Hemoglobin: 14.5 g/dL (Normal)\n"
+            "- Vitamin D: 32 ng/mL (Sufficient)\n"
+        )
+        try:
+            document = db.query(Document).filter(Document.id == document_id).first()
+            if document:
+                document.ocr_content = extracted_text
+                document.ocr_status = "completed"
+                db.commit()
+                logger.info(f"Mock OCR processing completed for document {document_id}")
+            return
+        except Exception as e:
+            logger.error(f"Error saving mock OCR result: {e}")
+            db.rollback()
+            return
+        finally:
+            db.close()
+
     from azure.ai.formrecognizer import DocumentAnalysisClient
     from azure.core.credentials import AzureKeyCredential
 
-    db = SessionLocal()
     try:
         # Download blob
         from services import get_blob_service_client
@@ -251,3 +289,14 @@ async def delete_doc(
         logger.error(f"Error deleting document: {e}")
         db.rollback()
         return JSONResponse(status_code=500, content={"error": "Failed to delete document."})
+
+
+from fastapi.responses import FileResponse
+import os
+
+@router.get("/mock-uploads/{filename}")
+async def serve_mock_upload(filename: str):
+    filepath = os.path.join("/app/uploads", filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="Mock file not found.")
+    return FileResponse(filepath)
