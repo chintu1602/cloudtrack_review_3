@@ -40,11 +40,15 @@ def truncate_to_tokens(text: str, max_tokens: int = 4000) -> str:
     return truncated + "\n\n[Content truncated due to length]"
 
 
-def build_system_prompt(allergies: list) -> str:
+def build_system_prompt(
+    allergies: list,
+    medical_conditions: dict = None,
+    dietary_preferences: list = None,
+) -> str:
     """
     Build the system prompt for diet plan generation.
-    Explicitly lists all patient allergies with severity and instructs GPT-4
-    to never recommend any allergen food under any circumstances.
+    Explicitly lists patient allergies, previous medical conditions, and food category choices (dietary preferences),
+    and instructs GPT-4 to identify the current disease/findings from the reports and tailor the diet accordingly.
     """
     allergy_section = ""
     if allergies:
@@ -61,11 +65,41 @@ def build_system_prompt(allergies: list) -> str:
     else:
         allergy_section = "\n\nNo known food allergies reported for this patient."
 
+    # --- Medical conditions section ---
+    conditions_section = ""
+    if medical_conditions:
+        conditions_list = []
+        if isinstance(medical_conditions, dict):
+            conditions_list = medical_conditions.get("conditions", [])
+            other_text = medical_conditions.get("other", "")
+            if other_text:
+                conditions_list = list(conditions_list) + [other_text]
+        elif isinstance(medical_conditions, list):
+            conditions_list = medical_conditions
+
+        # Filter out "None"
+        conditions_list = [c for c in conditions_list if c and c != "None"]
+
+        if conditions_list:
+            conditions_section = f"""\n\n🏥 PATIENT PREVIOUS MEDICAL CONDITIONS / DISEASES:
+The patient has the following historical medical conditions/diseases: {', '.join(conditions_list)}.
+You MUST tailor recommendations to support these previous medical conditions."""
+
+    # --- Dietary preferences section ---
+    preferences_section = ""
+    if dietary_preferences:
+        preferences_section = f"""\n\n🍽️ PATIENT DIETARY PREFERENCES / FOOD CATEGORY CHOSEN:
+The patient follows these dietary preferences/food categories: {', '.join(dietary_preferences)}.
+You MUST respect ALL dietary preferences (e.g., if vegetarian, do not recommend meat, poultry, or fish;
+if vegan, exclude all animal products; if halal or kosher, ensure all foods comply with those requirements;
+if keto, focus on high-fat low-carb options). Violating dietary preferences is NOT acceptable."""
+
     system_prompt = f"""You are a professional clinical nutritionist and dietitian AI assistant for the NutriAI Health Portal.
-Your role is to analyze patient medical documents (lab reports, prescriptions, etc.) and generate personalized,
-safe, and medically-appropriate diet plans.
+Your role is to analyze patient medical documents (lab reports, prescriptions, etc.), identify any current disease or medical findings from the reports, and generate personalized, safe, and medically-appropriate diet plans.
 
 {allergy_section}
+{conditions_section}
+{preferences_section}
 
 You MUST respond with valid JSON in the following exact structure:
 {{
@@ -118,14 +152,16 @@ You MUST respond with valid JSON in the following exact structure:
 }}
 
 Guidelines:
-1. Base your recommendations on the medical data provided in the documents.
-2. Be specific with food names, portions, and timing.
-3. Consider the patient's medical conditions when making recommendations.
-4. Ensure the weekly meal plan is varied and nutritionally balanced.
-5. Always prioritize patient safety, especially regarding allergies.
-6. Provide practical, actionable advice that patients can easily follow.
-7. Include all 7 days (monday through sunday) in the weekly meal plan.
-8. Each day must have breakfast, lunch, dinner, and snacks.
+1. Base your recommendations on the medical data provided in the documents. Specifically, identify any current diseases, conditions, or clinical findings indicated in the reports.
+2. Consider the patient's previous medical conditions/diseases when making recommendations.
+3. Incorporate recommendations based on both the current identified disease from the reports and the previous diseases.
+4. Respect all dietary preferences / food categories chosen by the patient — never include foods that violate them.
+5. Always prioritize patient safety, especially regarding allergies. Never recommend any foods the patient is allergic to.
+6. Provide a 2-3 sentence overall summary of the diet plan in the `plan_summary` field. In this summary, explicitly mention the current identified disease from the reports, how it interacts with the patient's previous diseases, and how the diet plan addresses both.
+7. Be specific with food names, portions, and timing.
+8. Ensure the weekly meal plan is varied and nutritionally balanced.
+9. Include all 7 days (monday through sunday) in the weekly meal plan.
+10. Each day must have breakfast, lunch, dinner, and snacks.
 """
     return system_prompt
 
@@ -133,6 +169,8 @@ Guidelines:
 def generate_diet_plan(
     ocr_content: str,
     allergies: list,
+    medical_conditions: dict = None,
+    dietary_preferences: list = None,
     additional_notes: Optional[str] = None,
 ) -> Optional[dict]:
     """
@@ -141,6 +179,8 @@ def generate_diet_plan(
     Args:
         ocr_content: Combined OCR text from patient documents (truncated to 4000 tokens)
         allergies: List of patient allergies with allergen_name, severity, and notes
+        medical_conditions: Patient historical medical conditions
+        dietary_preferences: Patient chosen food categories/preferences
         additional_notes: Optional additional notes from the patient
         
     Returns:
@@ -152,7 +192,11 @@ def generate_diet_plan(
         # Truncate OCR content to 4000 tokens
         truncated_content = truncate_to_tokens(ocr_content, max_tokens=4000)
 
-        system_prompt = build_system_prompt(allergies)
+        system_prompt = build_system_prompt(
+            allergies=allergies,
+            medical_conditions=medical_conditions,
+            dietary_preferences=dietary_preferences,
+        )
 
         user_message = f"""Please analyze the following medical document content and generate a personalized diet plan.
 

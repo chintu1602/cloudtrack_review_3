@@ -95,7 +95,15 @@ export default function Documents() {
                   <thead><tr><th>Name</th><th>Type</th><th>Uploaded</th><th>OCR Status</th><th>Actions</th></tr></thead>
                   <tbody>{documents.map(doc => (
                     <tr key={doc.id}>
-                      <td><i className="fas fa-file-alt text-primary-green me-2"></i>{doc.original_filename.slice(0, 40)}{doc.original_filename.length > 40 ? '...' : ''}</td>
+                      <td>
+                        <i className="fas fa-file-alt text-primary-green me-2"></i>
+                        {doc.original_filename.slice(0, 40)}{doc.original_filename.length > 40 ? '...' : ''}
+                        {doc.ocr_status === 'failed' && doc.ocr_content && (
+                          <div className="text-danger small mt-1">
+                            <i className="fas fa-exclamation-circle me-1"></i>{doc.ocr_content}
+                          </div>
+                        )}
+                      </td>
                       <td>{doc.document_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</td>
                       <td>{new Date(doc.uploaded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
                       <td><StatusBadge status={doc.ocr_status} /></td>

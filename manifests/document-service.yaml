@@ -2,63 +2,53 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: nutrition-service
+  name: document-service
   namespace: nutriai
   labels:
-    app: nutrition-service
+    app: document-service
     app.kubernetes.io/part-of: nutriai
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: nutrition-service
+      app: document-service
   template:
     metadata:
       labels:
-        app: nutrition-service
+        app: document-service
     spec:
       containers:
-        - name: nutrition-service
-          image: nutriai_acr/nutrition-service:latest
+        - name: document-service
+          image: nutriai_acr/document-service:latest
           imagePullPolicy: Always
           ports:
-            - containerPort: 8003
+            - containerPort: 8002
           env:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: nutriai-secrets
                   key: DATABASE_URL
-            - name: AZURE_OPENAI_ENDPOINT
+            - name: AZURE_STORAGE_CONNECTION_STRING
               valueFrom:
                 secretKeyRef:
                   name: nutriai-secrets
-                  key: AZURE_OPENAI_ENDPOINT
-            - name: AZURE_OPENAI_KEY
+                  key: AZURE_STORAGE_CONNECTION_STRING
+            - name: AZURE_STORAGE_CONTAINER_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: nutriai-config
+                  key: AZURE_STORAGE_CONTAINER_NAME
+            - name: AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT
               valueFrom:
                 secretKeyRef:
                   name: nutriai-secrets
-                  key: AZURE_OPENAI_KEY
-            - name: AZURE_OPENAI_DEPLOYMENT_NAME
-              valueFrom:
-                configMapKeyRef:
-                  name: nutriai-config
-                  key: AZURE_OPENAI_DEPLOYMENT_NAME
-            - name: AZURE_OPENAI_API_VERSION
-              valueFrom:
-                configMapKeyRef:
-                  name: nutriai-config
-                  key: AZURE_OPENAI_API_VERSION
-            - name: AZURE_SERVICE_BUS_CONNECTION_STRING
+                  key: AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT
+            - name: AZURE_DOCUMENT_INTELLIGENCE_KEY
               valueFrom:
                 secretKeyRef:
                   name: nutriai-secrets
-                  key: AZURE_SERVICE_BUS_CONNECTION_STRING
-            - name: AZURE_SERVICE_BUS_TOPIC_NAME
-              valueFrom:
-                configMapKeyRef:
-                  name: nutriai-config
-                  key: AZURE_SERVICE_BUS_TOPIC_NAME
+                  key: AZURE_DOCUMENT_INTELLIGENCE_KEY
           resources:
             requests:
               memory: "256Mi"
@@ -69,25 +59,25 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 8003
+              port: 8002
             initialDelaySeconds: 20
             periodSeconds: 15
           readinessProbe:
             httpGet:
               path: /health
-              port: 8003
+              port: 8002
             initialDelaySeconds: 10
             periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: nutrition-service
+  name: document-service
   namespace: nutriai
 spec:
   selector:
-    app: nutrition-service
+    app: document-service
   ports:
-    - port: 8003
-      targetPort: 8003
+    - port: 8002
+      targetPort: 8002
   type: ClusterIP

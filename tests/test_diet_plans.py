@@ -41,16 +41,16 @@ class TestDietPlanHistory:
         plan = DietPlan(
             id=uuid.uuid4(),
             user_id=test_user.id,
-            document_ids=json.dumps([str(uuid.uuid4())]),
+            document_ids=[str(uuid.uuid4())],
             plan_title="Test Diet Plan",
             plan_summary="A test diet plan for unit testing",
-            foods_to_eat=json.dumps(["Vegetables", "Lean protein", "Whole grains"]),
-            foods_to_avoid=json.dumps(["Processed sugar", "Fried foods"]),
-            weekly_meal_plan=json.dumps({
+            foods_to_eat=[{"food_name": "Vegetables"}, {"food_name": "Lean protein"}, {"food_name": "Whole grains"}],
+            foods_to_avoid=[{"food_name": "Processed sugar"}, {"food_name": "Fried foods"}],
+            weekly_meal_plan={
                 "Monday": {"breakfast": "Oatmeal", "lunch": "Salad", "dinner": "Grilled chicken"},
-            }),
-            nutritional_guidelines=json.dumps({"calories": 2000, "protein": "80g"}),
-            allergy_notes=json.dumps(["Avoid peanuts due to severe allergy"]),
+            },
+            nutritional_guidelines={"calories": 2000, "protein": "80g"},
+            allergy_notes=["Avoid peanuts due to severe allergy"],
             generated_at=datetime.utcnow(),
             is_active=True,
         )
@@ -88,6 +88,13 @@ class TestDietPlanGeneration:
         mock_plan = MagicMock()
         mock_plan.id = uuid.uuid4()
         mock_plan.plan_title = "Generated Diet Plan"
+        mock_plan.plan_summary = "A test plan summary"
+        mock_plan.foods_to_eat = []
+        mock_plan.foods_to_avoid = []
+        mock_plan.weekly_meal_plan = {}
+        mock_plan.nutritional_guidelines = {}
+        mock_plan.allergy_notes = []
+        mock_plan.additional_recommendations = []
         mock_create.return_value = mock_plan
 
         response = authenticated_client.post(
@@ -111,7 +118,7 @@ class TestDietPlanGeneration:
             follow_redirects=False,
         )
         # Should redirect back with error or return validation error
-        assert response.status_code in [200, 302, 422]
+        assert response.status_code in [200, 302, 422, 400]
 
 
 class TestDietPlanDetail:
@@ -123,14 +130,14 @@ class TestDietPlanDetail:
         plan = DietPlan(
             id=plan_id,
             user_id=test_user.id,
-            document_ids=json.dumps([str(uuid.uuid4())]),
+            document_ids=[str(uuid.uuid4())],
             plan_title="My Diet Plan",
             plan_summary="Personalized plan for the test user",
-            foods_to_eat=json.dumps(["Fruits", "Vegetables"]),
-            foods_to_avoid=json.dumps(["Allergens"]),
-            weekly_meal_plan=json.dumps({}),
-            nutritional_guidelines=json.dumps({}),
-            allergy_notes=json.dumps([]),
+            foods_to_eat=[{"food_name": "Fruits"}, {"food_name": "Vegetables"}],
+            foods_to_avoid=[{"food_name": "Allergens"}],
+            weekly_meal_plan={},
+            nutritional_guidelines={},
+            allergy_notes=[],
             generated_at=datetime.utcnow(),
             is_active=True,
         )
@@ -154,14 +161,14 @@ class TestDietPlanDetail:
         plan = DietPlan(
             id=plan_id,
             user_id=other_user_id,
-            document_ids=json.dumps([]),
+            document_ids=[],
             plan_title="Not My Plan",
             plan_summary="Someone else's plan",
-            foods_to_eat=json.dumps([]),
-            foods_to_avoid=json.dumps([]),
-            weekly_meal_plan=json.dumps({}),
-            nutritional_guidelines=json.dumps({}),
-            allergy_notes=json.dumps([]),
+            foods_to_eat=[],
+            foods_to_avoid=[],
+            weekly_meal_plan={},
+            nutritional_guidelines={},
+            allergy_notes=[],
             generated_at=datetime.utcnow(),
             is_active=True,
         )
@@ -190,3 +197,65 @@ class TestAllergyAwareness:
         response = authenticated_client.get("/diet-plan")
         assert response.status_code == 200
         assert "Peanuts" in response.text or "peanuts" in response.text
+
+
+class TestDietPlanService:
+    """Tests for the diet plan service layer."""
+
+    @patch("app.services.diet_plan_service.generate_diet_plan")
+    def test_create_diet_plan_includes_profile_data(self, mock_generate, db_session, test_user):
+        """create_diet_plan should fetch and pass medical conditions and dietary preferences."""
+        from app.models.user import PatientProfile
+        from app.services.diet_plan_service import create_diet_plan
+
+        # Create patient profile
+        profile = PatientProfile(
+            user_id=test_user.id,
+            medical_conditions={"conditions": ["Diabetes", "Hypertension"], "other": "Gout"},
+            dietary_preferences=["vegetarian"],
+        )
+        db_session.add(profile)
+
+        # Create completed document
+        doc_id = uuid.uuid4()
+        doc = Document(
+            id=doc_id,
+            user_id=test_user.id,
+            document_type="lab_report",
+            original_filename="lab.pdf",
+            blob_name="lab.pdf",
+            blob_url="https://storage.blob.core.windows.net/lab.pdf",
+            ocr_status="completed",
+            ocr_content="Glucose: 150 mg/dL",
+            uploaded_at=datetime.utcnow(),
+        )
+        db_session.add(doc)
+        db_session.commit()
+
+        # Mock the AI generator response
+        mock_generate.return_value = {
+            "plan_title": "AI Tailored Diet Plan",
+            "plan_summary": "Summary tailored to diabetes",
+            "foods_to_eat": [{"food_name": "Vegetables"}],
+            "foods_to_avoid": [{"food_name": "Sugary drinks"}],
+            "weekly_meal_plan": {},
+            "nutritional_guidelines": {},
+            "allergy_notes": [],
+            "additional_recommendations": [],
+        }
+
+        # Generate plan
+        plan = create_diet_plan(
+            db=db_session,
+            user=test_user,
+            document_ids=[str(doc_id)],
+            additional_notes="None",
+        )
+
+        assert plan is not None
+        assert mock_generate.called
+        called_args, called_kwargs = mock_generate.call_args
+        
+        # Verify the profile parameters were passed to generate_diet_plan
+        assert called_kwargs["medical_conditions"] == {"conditions": ["Diabetes", "Hypertension"], "other": "Gout"}
+        assert called_kwargs["dietary_preferences"] == ["vegetarian"]

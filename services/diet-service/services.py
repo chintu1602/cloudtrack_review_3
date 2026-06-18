@@ -113,8 +113,7 @@ Failure to include these fields will result in rejection of your response.
 """
 
     system_prompt = f"""You are a professional clinical nutritionist and dietitian AI assistant for the NutriAI Health Portal.
-Your role is to analyze patient medical documents (lab reports, prescriptions, etc.) and generate personalized,
-safe, and medically-appropriate diet plans.
+Your role is to analyze patient medical documents (lab reports, prescriptions, etc.), identify any current disease or medical findings from the reports, and generate personalized, safe, and medically-appropriate diet plans.
 
 {allergy_section}
 {conditions_section}
@@ -172,16 +171,16 @@ You MUST respond with valid JSON in the following exact structure:
 }}
 
 Guidelines:
-1. Base your recommendations on the medical data provided in the documents.
-2. Be specific with food names, portions, and timing.
-3. Consider the patient's medical conditions when making recommendations.
-4. Ensure the weekly meal plan is varied and nutritionally balanced.
-5. Always prioritize patient safety, especially regarding allergies.
-6. Provide practical, actionable advice that patients can easily follow.
-7. Include all 7 days (monday through sunday) in the weekly meal plan.
-8. Each day must have breakfast, lunch, dinner, and snacks.
-9. Respect all dietary preferences — never include foods that violate them.
-10. Tailor nutritional guidelines based on the patient's medical conditions.
+1. Base your recommendations on the medical data provided in the documents. Specifically, identify any current diseases, conditions, or clinical findings indicated in the reports.
+2. Consider the patient's previous medical conditions/diseases when making recommendations.
+3. Incorporate recommendations based on both the current identified disease from the reports and the previous diseases.
+4. Respect all dietary preferences / food categories chosen by the patient — never include foods that violate them.
+5. Always prioritize patient safety, especially regarding allergies. Never recommend any foods the patient is allergic to.
+6. Provide a 2-3 sentence overall summary of the diet plan in the `plan_summary` field. In this summary, explicitly mention the current identified disease from the reports, how it interacts with the patient's previous diseases, and how the diet plan addresses both.
+7. Be specific with food names, portions, and timing.
+8. Ensure the weekly meal plan is varied and nutritionally balanced.
+9. Include all 7 days (monday through sunday) in the weekly meal plan.
+10. Each day must have breakfast, lunch, dinner, and snacks.
 """
     return system_prompt
 
@@ -230,355 +229,7 @@ def validate_diet_plan_json(data: dict) -> bool:
     return True
 
 
-def generate_local_mock_diet_plan(
-    allergies: list,
-    medical_conditions: dict = None,
-    dietary_preferences: list = None,
-    additional_notes: Optional[str] = None,
-) -> dict:
-    """Generate a valid, mock diet plan locally when Azure OpenAI is disabled or fails."""
-    logger.info("Generating local mock diet plan...")
-    
-    conditions_list = []
-    if medical_conditions:
-        if isinstance(medical_conditions, dict):
-            conditions_list = medical_conditions.get("conditions", [])
-            other = medical_conditions.get("other", "")
-            if other and other != "None":
-                conditions_list = list(conditions_list) + [other]
-        elif isinstance(medical_conditions, list):
-            conditions_list = medical_conditions
-    conditions_list = [c for c in conditions_list if c and c != "None"]
 
-    preferences = dietary_preferences or []
-    
-    title = "Personalized Wellness Diet Plan"
-    if conditions_list:
-        title += f" for {' & '.join(conditions_list)}"
-    elif preferences:
-        title += f" ({', '.join(preferences)})"
-        
-    summary = "A customized nutritional guideline designed to optimize health markers and support overall well-being."
-    if conditions_list:
-        summary += f" This plan specifically targets management of {', '.join(conditions_list)} through nutrient-dense selections."
-    if preferences:
-        summary += f" All meal recommendations strictly adhere to a {', '.join(preferences)} dietary pattern."
-
-    allergen_names = [a["allergen_name"].lower() for a in allergies if "allergen_name" in a]
-
-    foods_pool = [
-        {
-            "food_name": "Quinoa Bowl",
-            "reason": "Rich in protein, fiber, and essential amino acids. Supports stable blood sugar.",
-            "portion_size": "1 cup cooked",
-            "timing": "Lunch",
-            "frequency": "Daily",
-            "tags": ["vegetarian", "vegan", "low-glycemic"]
-        },
-        {
-            "food_name": "Steamed Salmon",
-            "reason": "Excellent source of omega-3 fatty acids to reduce inflammation and support cardiovascular health.",
-            "portion_size": "150g",
-            "timing": "Dinner",
-            "frequency": "3 times per week",
-            "tags": ["non-vegetarian", "low-glycemic", "fish"]
-        },
-        {
-            "food_name": "Greek Yogurt",
-            "reason": "High in protein and probiotics, promoting gut health and muscle maintenance.",
-            "portion_size": "200g",
-            "timing": "Breakfast",
-            "frequency": "Daily",
-            "tags": ["vegetarian", "low-glycemic", "dairy"]
-        },
-        {
-            "food_name": "Mixed Berries",
-            "reason": "Packed with antioxidants and high in fiber, ideal for satisfying sweet cravings naturally.",
-            "portion_size": "1 cup",
-            "timing": "Morning Snack",
-            "frequency": "Daily",
-            "tags": ["vegetarian", "vegan", "low-glycemic", "fruit"]
-        },
-        {
-            "food_name": "Steamed Broccoli",
-            "reason": "High in vitamin C, K, and folate, containing potent bioactive compounds with anti-inflammatory effects.",
-            "portion_size": "1.5 cups",
-            "timing": "Dinner",
-            "frequency": "Daily",
-            "tags": ["vegetarian", "vegan", "low-glycemic"]
-        },
-        {
-            "food_name": "Almonds",
-            "reason": "Provides healthy monounsaturated fats, vitamin E, and magnesium.",
-            "portion_size": "1 ounce (about 23 nuts)",
-            "timing": "Afternoon Snack",
-            "frequency": "Daily",
-            "tags": ["vegetarian", "vegan", "low-glycemic", "nuts"]
-        },
-        {
-            "food_name": "Chia Seed Pudding",
-            "reason": "Loaded with soluble fiber and plant-based omega-3s, supporting digestive regularity.",
-            "portion_size": "1/2 cup",
-            "timing": "Breakfast",
-            "frequency": "4 times per week",
-            "tags": ["vegetarian", "vegan", "low-glycemic"]
-        },
-        {
-            "food_name": "Grilled Chicken Breast",
-            "reason": "Lean source of high-quality protein to support tissue repair and metabolic function.",
-            "portion_size": "150g",
-            "timing": "Lunch",
-            "frequency": "4 times per week",
-            "tags": ["non-vegetarian", "low-glycemic", "poultry"]
-        },
-        {
-            "food_name": "Oatmeal with Flaxseeds",
-            "reason": "Contains beta-glucan fiber which helps reduce cholesterol and improve glycemic control.",
-            "portion_size": "1 cup cooked",
-            "timing": "Breakfast",
-            "frequency": "Daily",
-            "tags": ["vegetarian", "vegan"]
-        },
-        {
-            "food_name": "Avocado",
-            "reason": "Source of healthy fats, fiber, and potassium, promoting heart health and nutrient absorption.",
-            "portion_size": "1/2 avocado",
-            "timing": "With lunch",
-            "frequency": "Daily",
-            "tags": ["vegetarian", "vegan", "low-glycemic"]
-        }
-    ]
-
-    filtered_foods_to_eat = []
-    for food in foods_pool:
-        # Check allergen
-        is_allergen = False
-        for allergen in allergen_names:
-            if allergen in food["food_name"].lower() or any(allergen in tag.lower() for tag in food["tags"]):
-                is_allergen = True
-                break
-        if is_allergen:
-            continue
-            
-        # Check vegetarian / vegan
-        is_vegan = any(p.lower() == "vegan" for p in preferences)
-        is_vegetarian = any(p.lower() in ["vegetarian", "veg"] for p in preferences) or is_vegan
-        
-        if is_vegan and any(tag in food["tags"] for tag in ["non-vegetarian", "dairy", "poultry", "fish"]):
-            continue
-        if is_vegetarian and any(tag in food["tags"] for tag in ["non-vegetarian", "poultry", "fish"]):
-            continue
-            
-        filtered_foods_to_eat.append({
-            "food_name": food["food_name"],
-            "reason": food["reason"],
-            "portion_size": food["portion_size"],
-            "timing": food["timing"],
-            "frequency": food["frequency"]
-        })
-
-    backup_eat_items = [
-        {"food_name": "Leafy Greens", "reason": "High in micronutrients and antioxidants.", "portion_size": "2 cups", "timing": "Dinner", "frequency": "Daily"},
-        {"food_name": "Cucumber Salad", "reason": "Hydrating and low calorie.", "portion_size": "1 cup", "timing": "Lunch", "frequency": "Daily"},
-        {"food_name": "Baked Tofu", "reason": "Good source of plant-based protein.", "portion_size": "100g", "timing": "Lunch", "frequency": "3 times per week"},
-        {"food_name": "Brown Rice", "reason": "Complex carbohydrate for sustained energy.", "portion_size": "1/2 cup cooked", "timing": "Lunch", "frequency": "Daily"},
-        {"food_name": "Steamed Zucchini", "reason": "Low calorie and easy to digest.", "portion_size": "1 cup", "timing": "Dinner", "frequency": "Daily"}
-    ]
-    for backup in backup_eat_items:
-        if len(filtered_foods_to_eat) >= 5:
-            break
-        is_allergen = False
-        for allergen in allergen_names:
-            if allergen in backup["food_name"].lower():
-                is_allergen = True
-                break
-        if is_allergen:
-            continue
-        filtered_foods_to_eat.append(backup)
-
-    avoid_pool = [
-        {
-            "food_name": "Refined Sugar",
-            "reason": "Causes rapid blood sugar spikes and increases systemic inflammation.",
-            "risk_level": "high",
-            "tags": ["sugar"]
-        },
-        {
-            "food_name": "Trans Fats / Fried Foods",
-            "reason": "Increases LDL cholesterol and elevates cardiovascular risk.",
-            "risk_level": "high",
-            "tags": ["grease", "fat"]
-        },
-        {
-            "food_name": "Processed Meats",
-            "reason": "Contains high sodium and preservatives linked to cardiovascular issues.",
-            "risk_level": "medium",
-            "tags": ["meat"]
-        },
-        {
-            "food_name": "White Bread / Refined Flour",
-            "reason": "High glycemic index, leads to insulin spikes.",
-            "risk_level": "medium",
-            "tags": ["carbs"]
-        },
-        {
-            "food_name": "Excessive Caffeine / Energy Drinks",
-            "reason": "Can cause heart rate fluctuations and disrupt sleep cycles.",
-            "risk_level": "medium",
-            "tags": ["caffeine"]
-        },
-        {
-            "food_name": "Sodas and Sweetened Beverages",
-            "reason": "High in empty calories and high-fructose corn syrup.",
-            "risk_level": "high",
-            "tags": ["sugar"]
-        }
-    ]
-
-    filtered_foods_to_avoid = []
-    for allergy in allergies:
-        filtered_foods_to_avoid.append({
-            "food_name": allergy["allergen_name"],
-            "reason": f"Patient has a documented {allergy['severity']} allergy to this item. {allergy.get('notes', '') or ''}",
-            "risk_level": "high"
-        })
-        
-    for item in avoid_pool:
-        if any(item["food_name"].lower() == a["food_name"].lower() for a in filtered_foods_to_avoid):
-            continue
-        is_vegan = any(p.lower() == "vegan" for p in preferences)
-        is_vegetarian = any(p.lower() in ["vegetarian", "veg"] for p in preferences) or is_vegan
-        if (is_vegan or is_vegetarian) and "meat" in item["tags"]:
-            continue
-            
-        filtered_foods_to_avoid.append({
-            "food_name": item["food_name"],
-            "reason": item["reason"],
-            "risk_level": item["risk_level"]
-        })
-
-    backup_avoid_items = [
-        {"food_name": "Artificial Sweeteners", "reason": "May disrupt gut microbiome balance.", "risk_level": "medium"},
-        {"food_name": "High-Sodium Packaged Snacks", "reason": "Contributes to water retention and elevated blood pressure.", "risk_level": "medium"},
-        {"food_name": "Alcohol", "reason": "Adds empty calories and strains liver metabolism.", "risk_level": "high"},
-        {"food_name": "Canned Soups with Preservatives", "reason": "Typically very high in sodium.", "risk_level": "medium"}
-    ]
-    for backup in backup_avoid_items:
-        if len(filtered_foods_to_avoid) >= 5:
-            break
-        if any(backup["food_name"].lower() == a["food_name"].lower() for a in filtered_foods_to_avoid):
-            continue
-        filtered_foods_to_avoid.append(backup)
-
-    replacement_map = {
-        "almond": "sunflower seed",
-        "walnut": "pumpkin seed",
-        "nut": "seed",
-        "peanut": "sunflower seed",
-        "egg": "avocado",
-        "salmon": "grilled cod",
-        "fish": "chicken breast" if not is_vegetarian else "tofu",
-        "yogurt": "coconut milk yogurt",
-        "milk": "oat milk",
-        "cheese": "hummus",
-        "tofu": "chickpeas",
-        "soy": "chickpeas"
-    }
-
-    def clean_allergens(text: str) -> str:
-        text_lower = text.lower()
-        cleaned_text = text
-        for allergen in allergen_names:
-            if allergen in text_lower:
-                for key, val in replacement_map.items():
-                    if key in allergen:
-                        cleaned_text = cleaned_text.replace(key, val)
-                        cleaned_text = cleaned_text.replace(key.capitalize(), val.capitalize())
-                if allergen in cleaned_text.lower():
-                    cleaned_text = cleaned_text.replace(allergen, "safe alternative food")
-        return cleaned_text
-
-    days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-    weekly_meal_plan = {}
-    
-    is_vegan = any(p.lower() == "vegan" for p in preferences)
-    is_vegetarian = any(p.lower() in ["vegetarian", "veg"] for p in preferences) or is_vegan
-
-    for i, day in enumerate(days):
-        day_meals = {}
-        if is_vegan:
-            day_meals = {
-                "breakfast": f"Oatmeal cooked in plant milk with chia seeds and {[ 'mixed berries', 'sliced bananas', 'strawberries', 'blueberries', 'raspberries', 'peach slices', 'apples' ][i % 7]}.",
-                "lunch": f"Quinoa salad with {[ 'baby spinach and baked tofu', 'roasted chickpeas and cucumber', 'black beans and corn', 'avocado and shredded carrots', 'cherry tomatoes and arugula', 'steamed broccoli and olives', 'mixed greens and sunflower seeds' ][i % 7]}.",
-                "dinner": f"{[ 'Lentil dahl', 'Chickpea curry', 'Stir-fried tofu', 'Black bean chili', 'Sweet potato stew', 'Vegetable quinoa soup', 'Tempeh stir-fry' ][i % 7]} with brown rice and steamed greens.",
-                "snacks": f"{[ 'Carrot sticks with hummus', 'Apple slices', 'Handful of pumpkin seeds', 'Cucumber slices with guacamole', 'Celery with sunflower seed butter', 'Mixed berries', 'Rice cakes with avocado' ][i % 7]}."
-            }
-        elif is_vegetarian:
-            day_meals = {
-                "breakfast": f"{[ 'Greek yogurt with honey and chia seeds', 'Scrambled tofu with spinach', 'Oatmeal with plant milk and berries', 'Avocado toast on whole grain bread', 'Smoothie bowl with protein powder', 'Chia pudding with fruit', 'Low-fat cottage cheese with peach' ][i % 7]}.",
-                "lunch": f"{[ 'Quinoa salad with feta and cucumber', 'Vegetable wrap with hummus', 'Lentil soup with side salad', 'Mediterranean chickpea bowl', 'Caprese salad with avocado', 'Roasted vegetable and goat cheese salad', 'Black bean and rice bowl' ][i % 7]}.",
-                "dinner": f"{[ 'Stir-fried vegetables with paneer', 'Vegetarian lasagna', 'Stuffed bell peppers with quinoa', 'Eggplant parmesan', 'Mushroom risotto with peas', 'Sweet potato and bean burrito', 'Butternut squash soup with roasted tofu' ][i % 7]}.",
-                "snacks": f"{[ 'Mixed berries', 'Handful of walnuts', 'Sliced cucumber with hummus', 'Roasted edamame', 'Apple slices with almond butter', 'Greek yogurt', 'Carrot sticks' ][i % 7]}."
-            }
-        else:
-            day_meals = {
-                "breakfast": f"{[ 'Greek yogurt with walnuts and honey', 'Scrambled eggs with spinach and avocado', 'Oatmeal with berries and chia seeds', 'Protein smoothie with banana', 'Smoked salmon on whole grain toast', 'Omelette with mushrooms and tomatoes', 'Chia seed pudding with almonds' ][i % 7]}.",
-                "lunch": f"{[ 'Grilled chicken salad with spinach', 'Turkey and avocado wrap', 'Tuna salad with mixed greens', 'Quinoa bowl with grilled chicken', 'Beef and broccoli stir-fry', 'Salmon salad with vinaigrette', 'Chicken vegetable soup' ][i % 7]}.",
-                "dinner": f"{[ 'Pan-seared salmon with asparagus', 'Grilled chicken breast with sweet potato', 'Turkey meatballs with zucchini noodles', 'Baked cod with steamed broccoli', 'Grilled steak with roasted brussels sprouts', 'Shrimp stir-fry with mixed vegetables', 'Baked chicken with roasted cauliflower' ][i % 7]}.",
-                "snacks": f"{[ 'Hard-boiled egg', 'Handful of almonds', 'Apple slices', 'Cucumber with hummus', 'Greek yogurt', 'Mixed berries', 'Celery sticks' ][i % 7]}."
-            }
-        
-        weekly_meal_plan[day] = {
-            "breakfast": clean_allergens(day_meals["breakfast"]),
-            "lunch": clean_allergens(day_meals["lunch"]),
-            "dinner": clean_allergens(day_meals["dinner"]),
-            "snacks": clean_allergens(day_meals["snacks"])
-        }
-
-    daily_calories = 1800 if any(c in "".join(conditions_list).lower() for c in ["diabetic", "diabetes", "obese", "obesity"]) else 2000
-    protein_grams = 65 if not is_vegan else 60
-    carbs_grams = 180 if any(c in "".join(conditions_list).lower() for c in ["diabetic", "diabetes"]) else 250
-    fats_grams = 60
-    fiber_grams = 35
-    water_liters = 3.0 if "hypertension" in "".join(conditions_list).lower() else 2.5
-    
-    nutritional_guidelines = {
-        "daily_calories": daily_calories,
-        "protein_grams": protein_grams,
-        "carbs_grams": carbs_grams,
-        "fats_grams": fats_grams,
-        "fiber_grams": fiber_grams,
-        "water_liters": water_liters
-    }
-
-    allergy_notes = []
-    for allergy in allergies:
-        allergy_notes.append(f"CRITICAL: Avoid all sources of {allergy['allergen_name']}. Severity: {allergy['severity']}.")
-    if not allergy_notes:
-        allergy_notes.append("No known food allergies reported. Always double-check ingredient lists.")
-
-    additional_recommendations = [
-        "Stay consistently hydrated throughout the day by drinking water between meals.",
-        "Practice mindful eating by chewing slowly and paying attention to satiety cues.",
-        "Aim for 7-8 hours of quality sleep to support metabolic and hormonal health."
-    ]
-    if any(c in "".join(conditions_list).lower() for c in ["hypertension", "heart"]):
-        additional_recommendations.append("Limit sodium intake to under 2,000 mg per day.")
-    if any(c in "".join(conditions_list).lower() for c in ["diabetic", "diabetes"]):
-        additional_recommendations.append("Monitor blood sugar levels regularly and align meals with insulin/medication timings.")
-    if additional_notes:
-        additional_recommendations.append(f"Note-based guidance: {additional_notes}")
-
-    return {
-        "plan_title": title,
-        "plan_summary": summary,
-        "foods_to_eat": filtered_foods_to_eat,
-        "foods_to_avoid": filtered_foods_to_avoid,
-        "weekly_meal_plan": weekly_meal_plan,
-        "nutritional_guidelines": nutritional_guidelines,
-        "allergy_notes": allergy_notes,
-        "additional_recommendations": additional_recommendations
-    }
 
 
 def generate_diet_plan_ai(
@@ -607,8 +258,8 @@ def generate_diet_plan_ai(
     )
 
     if is_mock:
-        logger.warning("Azure OpenAI key or endpoint is empty or placeholder. Running in LOCAL DIET PLAN MOCK mode.")
-        return generate_local_mock_diet_plan(allergies, medical_conditions, dietary_preferences, additional_notes)
+        logger.error("Azure OpenAI key or endpoint is empty or placeholder. AI service is not configured.")
+        return None
 
     client = get_openai_client()
     truncated_content = truncate_to_tokens(ocr_content, max_tokens=4000)
@@ -663,8 +314,8 @@ def generate_diet_plan_ai(
         except Exception as e:
             logger.error(f"OpenAI error on attempt {attempt + 1}: {e}")
 
-    logger.error("All 3 diet plan generation attempts failed. Falling back to LOCAL DIET PLAN MOCK mode.")
-    return generate_local_mock_diet_plan(allergies, medical_conditions, dietary_preferences, additional_notes)
+    logger.error("All 3 diet plan generation attempts failed. AI service is currently unavailable.")
+    return None
 
 
 # ============================================================

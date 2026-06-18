@@ -22,6 +22,107 @@ ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg"}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 
+def get_openai_client():
+    if not settings.AZURE_OPENAI_KEY or not settings.AZURE_OPENAI_ENDPOINT:
+        return None
+    try:
+        from openai import AzureOpenAI
+        return AzureOpenAI(
+            azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
+            api_key=settings.AZURE_OPENAI_KEY,
+            api_version=settings.AZURE_OPENAI_API_VERSION,
+        )
+    except Exception as e:
+        logger.error(f"Failed to create OpenAI client: {e}")
+        return None
+
+
+def fallback_validate_document(ocr_content: str, filename: str) -> dict:
+    content_lower = (ocr_content or "").lower() + " " + (filename or "").lower()
+    
+    # Lab report keywords
+    lab_keywords = ["lab", "report", "test", "result", "blood", "urine", "panel", "cholesterol", "glucose", "hemoglobin", "vitamin", "bpm", "mmhg", "patient health metrics"]
+    # Prescription keywords
+    rx_keywords = ["prescription", "rx", "medication", "mg", "tablet", "capsule", "take", "dosage", "doctor", "signature", "recipe", "pharmacy", "sig:"]
+    
+    is_lab = any(kw in content_lower for kw in lab_keywords)
+    is_rx = any(kw in content_lower for kw in rx_keywords)
+    
+    if is_lab:
+        return {"is_valid": True, "document_type": "lab_report", "error_message": ""}
+    elif is_rx:
+        return {"is_valid": True, "document_type": "prescription", "error_message": ""}
+    else:
+        return {
+            "is_valid": False,
+            "document_type": "other",
+            "error_message": "Invalid document. The uploaded file does not appear to be a medical lab report or a doctor's prescription. Please upload a valid document."
+        }
+
+
+def validate_document_with_ai(ocr_content: str, original_filename: str) -> dict:
+    import json
+    client = get_openai_client()
+    
+    is_mock = (
+        not settings.AZURE_OPENAI_KEY
+        or settings.AZURE_OPENAI_KEY == ""
+        or "your-" in settings.AZURE_OPENAI_KEY
+        or settings.AZURE_OPENAI_KEY.startswith("<")
+        or not settings.AZURE_OPENAI_ENDPOINT
+        or settings.AZURE_OPENAI_ENDPOINT == ""
+        or "your-" in settings.AZURE_OPENAI_ENDPOINT
+        or settings.AZURE_OPENAI_ENDPOINT.startswith("<")
+    )
+    
+    if is_mock or not client:
+        logger.warning("Azure OpenAI is not configured/configured as mock. Using rule-based validation fallback.")
+        return fallback_validate_document(ocr_content, original_filename)
+        
+    try:
+        system_prompt = (
+            "You are an AI assistant designed to classify and validate uploaded medical documents for a health portal.\n"
+            "Your job is to determine if the document is either:\n"
+            "1. A Lab Report (containing lab test results, blood tests, panel results, medical metrics, etc.)\n"
+            "2. A Prescription (containing doctor's prescriptions, list of medications, medical instructions, dosage, doctor sign-offs, etc.)\n"
+            "3. Irrelevant or invalid (anything else, such as restaurant receipts, personal photos, general articles, books, food recipes, IDs, invoices, etc.)\n\n"
+            "You MUST respond with valid JSON in the following exact structure:\n"
+            "{\n"
+            "    \"is_valid\": true/false,\n"
+            "    \"document_type\": \"lab_report\"/\"prescription\"/\"other\",\n"
+            "    \"error_message\": \"If not valid, a user-friendly soft error message explaining that the document is invalid and only lab reports or prescriptions are accepted. Otherwise, empty string.\"\n"
+            "}"
+        )
+        
+        user_message = (
+            f"Filename: {original_filename}\n\n"
+            f"Extracted Document Text:\n{ocr_content[:4000]}"
+        )
+        
+        response = client.chat.completions.create(
+            model=settings.AZURE_OPENAI_DEPLOYMENT_NAME,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.0,
+            max_tokens=500,
+        )
+        
+        result = json.loads(response.choices[0].message.content)
+        if "is_valid" in result and "document_type" in result:
+            return {
+                "is_valid": bool(result.get("is_valid")),
+                "document_type": result.get("document_type"),
+                "error_message": result.get("error_message", "")
+            }
+    except Exception as e:
+        logger.error(f"AI document validation error: {e}. Falling back to rule-based validation.")
+        
+    return fallback_validate_document(ocr_content, original_filename)
+
+
 def process_document_ocr(document_id: str, blob_name: str):
     """
     Background task: download blob, run OCR, update database.
@@ -41,23 +142,44 @@ def process_document_ocr(document_id: str, blob_name: str):
         logger.warning(f"Running OCR background task in MOCK mode for document: {document_id}")
         import time
         time.sleep(2) # Simulate processing delay
-        extracted_text = (
-            "Lab Report Analysis (Local Mock Mode)\n\n"
-            "Patient Health Metrics Summary:\n"
-            "- Heart Rate: 72 bpm (Normal)\n"
-            "- Blood Pressure: 120/80 mmHg (Optimal)\n"
-            "- Blood Sugar: 95 mg/dL (Normal)\n"
-            "- Cholesterol: 185 mg/dL (Desirable)\n"
-            "- Hemoglobin: 14.5 g/dL (Normal)\n"
-            "- Vitamin D: 32 ng/mL (Sufficient)\n"
-        )
         try:
             document = db.query(Document).filter(Document.id == document_id).first()
             if document:
-                document.ocr_content = extracted_text
-                document.ocr_status = "completed"
+                filename_lower = document.original_filename.lower()
+                if any(w in filename_lower for w in ["receipt", "invoice", "recipe", "dog", "cat", "sample", "photo", "book"]):
+                    extracted_text = (
+                        "Walmart Supercenter Receipt\n"
+                        "Transaction: 9283401923\n"
+                        "1. Organic Bananas - $1.99\n"
+                        "2. Whole Milk Gallon - $3.49\n"
+                        "3. Dog Food Kibbles - $12.99\n"
+                        "Total: $18.47\n"
+                        "Thank you for shopping!"
+                    )
+                else:
+                    extracted_text = (
+                        "Lab Report Analysis (Local Mock Mode)\n\n"
+                        "Patient Health Metrics Summary:\n"
+                        "- Heart Rate: 72 bpm (Normal)\n"
+                        "- Blood Pressure: 120/80 mmHg (Optimal)\n"
+                        "- Blood Sugar: 95 mg/dL (Normal)\n"
+                        "- Cholesterol: 185 mg/dL (Desirable)\n"
+                        "- Hemoglobin: 14.5 g/dL (Normal)\n"
+                        "- Vitamin D: 32 ng/mL (Sufficient)\n"
+                    )
+
+                validation = validate_document_with_ai(extracted_text, document.original_filename)
+                if validation["is_valid"]:
+                    document.ocr_content = extracted_text
+                    document.ocr_status = "completed"
+                    document.document_type = validation["document_type"]
+                else:
+                    document.ocr_content = validation["error_message"]
+                    document.ocr_status = "failed"
+                    document.document_type = "other"
+
                 db.commit()
-                logger.info(f"Mock OCR processing completed for document {document_id}")
+                logger.info(f"Mock OCR and validation completed for document {document_id}")
             return
         except Exception as e:
             logger.error(f"Error saving mock OCR result: {e}")
@@ -115,8 +237,15 @@ def process_document_ocr(document_id: str, blob_name: str):
         # Update document record
         document = db.query(Document).filter(Document.id == document_id).first()
         if document:
-            document.ocr_content = extracted_text
-            document.ocr_status = "completed"
+            validation = validate_document_with_ai(extracted_text, document.original_filename)
+            if validation["is_valid"]:
+                document.ocr_content = extracted_text
+                document.ocr_status = "completed"
+                document.document_type = validation["document_type"]
+            else:
+                document.ocr_content = validation["error_message"]
+                document.ocr_status = "failed"
+                document.document_type = "other"
             db.commit()
 
     except Exception as e:
@@ -152,6 +281,7 @@ async def list_documents(request: Request, db: Session = Depends(get_db)):
             "original_filename": doc.original_filename,
             "blob_url": doc.blob_url,
             "ocr_status": doc.ocr_status,
+            "ocr_content": doc.ocr_content,
             "uploaded_at": doc.uploaded_at.isoformat(),
         }
         for doc in documents

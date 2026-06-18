@@ -88,6 +88,7 @@ app.add_middleware(
 )
 
 
+@app.get("/api/health")
 @app.get("/health")
 async def health_check():
     """API Gateway health check."""
@@ -98,6 +99,7 @@ async def health_check():
     }
 
 
+@app.get("/api/health/all")
 @app.get("/health/all")
 async def health_all(request: Request):
     """Aggregate health checks from all downstream services."""
@@ -140,6 +142,12 @@ async def proxy(request: Request, path: str):
     determines the target service, and forwards the request.
     """
     request_path = f"/{path}"
+
+    # Strip /api prefix if present (routed via Ingress/AGIC)
+    if request_path.startswith("/api/"):
+        request_path = request_path[4:]
+    elif request_path == "/api":
+        request_path = "/"
 
     # Determine target service
     target_url = None

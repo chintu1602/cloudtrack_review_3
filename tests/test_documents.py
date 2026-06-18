@@ -140,3 +140,37 @@ class TestDocumentDeletion:
 
         response = authenticated_client.delete(f"/documents/{doc_id}")
         assert response.status_code in [403, 404]
+
+
+class TestDocumentValidation:
+    """Tests for AI and fallback document validation logic."""
+
+    def test_fallback_validation_lab_report(self):
+        from app.routers.documents import fallback_validate_document
+        res = fallback_validate_document(
+            ocr_content="Patient blood test results showing cholesterol levels",
+            filename="blood_test.pdf"
+        )
+        assert res["is_valid"] is True
+        assert res["document_type"] == "lab_report"
+        assert res["error_message"] == ""
+
+    def test_fallback_validation_prescription(self):
+        from app.routers.documents import fallback_validate_document
+        res = fallback_validate_document(
+            ocr_content="Rx: take 1 tablet of Metformin 500mg daily",
+            filename="prescription.png"
+        )
+        assert res["is_valid"] is True
+        assert res["document_type"] == "prescription"
+        assert res["error_message"] == ""
+
+    def test_fallback_validation_invalid_document(self):
+        from app.routers.documents import fallback_validate_document
+        res = fallback_validate_document(
+            ocr_content="Walmart receipt total amount $23.50",
+            filename="receipt.jpg"
+        )
+        assert res["is_valid"] is False
+        assert res["document_type"] == "other"
+        assert "Invalid document" in res["error_message"]

@@ -4,6 +4,7 @@ Handles diet plan generation, history, detail view, and PDF download.
 """
 
 import logging
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Request, Form, HTTPException
@@ -122,7 +123,7 @@ async def history_page(
 
 @router.get("/{plan_id}", response_class=HTMLResponse)
 async def plan_detail(
-    plan_id: str,
+    plan_id: uuid.UUID,
     request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -143,7 +144,7 @@ async def plan_detail(
 
 @router.get("/{plan_id}/pdf")
 async def download_pdf(
-    plan_id: str,
+    plan_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):

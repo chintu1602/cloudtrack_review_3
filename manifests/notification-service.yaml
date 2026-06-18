@@ -2,24 +2,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: email-service
+  name: notification-service
   namespace: nutriai
   labels:
-    app: email-service
+    app: notification-service
     app.kubernetes.io/part-of: nutriai
 spec:
-  replicas: 1  # Single replica — Service Bus consumer should not compete for messages
+  replicas: 1  # Single replica is used to ensure sequential Service Bus consumer processing
   selector:
     matchLabels:
-      app: email-service
+      app: notification-service
   template:
     metadata:
       labels:
-        app: email-service
+        app: notification-service
     spec:
       containers:
-        - name: email-service
-          image: nutriai_acr/email-service:latest
+        - name: notification-service
+          image: nutriai_acr/notification-service:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8005
@@ -97,11 +97,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: email-service
+  name: notification-service
   namespace: nutriai
 spec:
   selector:
-    app: email-service
+    app: notification-service
   ports:
     - port: 8005
       targetPort: 8005

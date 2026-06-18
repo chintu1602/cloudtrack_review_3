@@ -81,8 +81,8 @@ async def generate_plan(payload: GenerateRequest, request: Request, db: Session 
 
         if not plan:
             return JSONResponse(
-                status_code=500,
-                content={"error": "Failed to generate diet plan. The AI could not produce a valid response after 3 attempts. Please try again."},
+                status_code=503,
+                content={"error": "We're sorry! Our AI diet plan service is currently unavailable. Please try again later or contact support if the issue persists."},
             )
 
         return {
@@ -100,7 +100,7 @@ async def generate_plan(payload: GenerateRequest, request: Request, db: Session 
 
     except Exception as e:
         logger.error(f"Error generating diet plan: {e}")
-        return JSONResponse(status_code=500, content={"error": "An error occurred while generating the diet plan."})
+        return JSONResponse(status_code=503, content={"error": "We're sorry! Our AI diet plan service is temporarily unavailable. Please try again in a few minutes."})
 
 
 @router.get("/history")

@@ -1,0 +1,113 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diet-service
+  namespace: nutriai
+  labels:
+    app: diet-service
+    app.kubernetes.io/part-of: nutriai
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: diet-service
+  template:
+    metadata:
+      labels:
+        app: diet-service
+    spec:
+      containers:
+        - name: diet-service
+          image: nutriai_acr/diet-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8003
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: nutriai-secrets
+                  key: DATABASE_URL
+            - name: AZURE_OPENAI_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: nutriai-secrets
+                  key: AZURE_OPENAI_ENDPOINT
+            - name: AZURE_OPENAI_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nutriai-secrets
+                  key: AZURE_OPENAI_KEY
+            - name: AZURE_OPENAI_DEPLOYMENT_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: nutriai-config
+                  key: AZURE_OPENAI_DEPLOYMENT_NAME
+            - name: AZURE_OPENAI_API_VERSION
+              valueFrom:
+                configMapKeyRef:
+                  name: nutriai-config
+                  key: AZURE_OPENAI_API_VERSION
+            - name: AZURE_SERVICE_BUS_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: nutriai-secrets
+                  key: AZURE_SERVICE_BUS_CONNECTION_STRING
+            - name: AZURE_SERVICE_BUS_TOPIC_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: nutriai-config
+                  key: AZURE_SERVICE_BUS_TOPIC_NAME
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8003
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8003
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: diet-service
+  namespace: nutriai
+spec:
+  selector:
+    app: diet-service
+  ports:
+    - port: 8003
+      targetPort: 8003
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: diet-service-hpa
+  namespace: nutriai
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: diet-service
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75

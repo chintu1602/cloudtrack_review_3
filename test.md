@@ -6,16 +6,17 @@ This guide provides step-by-step instructions to validate the **NutriAI Health P
 
 ## Architecture Overview
 
-The frontend React client acts as a single point of entry. It sends requests to `/api/*`, which the Nginx server in the frontend container forwards internally to the API Gateway. The API Gateway then routes requests to the respective microservices:
+The frontend React client acts as a single point of entry. It sends requests to `/api/*`, which the Nginx server in the frontend container forwards internally to the API Gateway in local development, or which the AGIC Ingress routes directly in production. The API Gateway then routes requests to the respective microservices:
 
 ```
 [Browser] ──> [Frontend Nginx (Port 3000)]
                       │
-                      └──> (internal /api proxy) ──> [API Gateway (Port 8000)]
+                      └──> (internal /api proxy) ──> [api-gateway (Port 8000)]
                                                             │
          ┌──────────────────┬───────────────────┬───────────┴───────────┬──────────────┐
          ▼                  ▼                   ▼                       ▼              ▼
-[Identity (8001)]    [OCR (8002)]      [Nutrition (8003)]        [Vitals (8004)]   [Others...]
+  [auth-service]     [document-service]   [diet-service]         [health-service]   [Others...]
+     (8001)              (8002)              (8003)                  (8004)
 ```
 
 ---
@@ -202,7 +203,7 @@ export REGISTRY=nutriai_acr
 docker compose up --build
 ```
 
-Verify that all 11 containers (`postgres`, `redis`, `gateway`, `identity-service`, `ocr-service`, `nutrition-service`, `vitals-service`, `patient-service`, `admin-service`, `email-service`, and `frontend`) are up and healthy:
+Verify that all 11 containers (`postgres`, `redis`, `api-gateway`, `auth-service`, `document-service`, `diet-service`, `health-service`, `profile-service`, `admin-service`, `notification-service`, and `frontend`) are up and healthy:
 
 ```bash
 docker compose ps
@@ -215,21 +216,21 @@ docker compose ps
 Open your browser and navigate to **`http://localhost:3000`**. Test the following integration flows:
 
 ### 1. User Authentication (Login / Register Screen)
-* **Under the Hood**: Browser calls `/api/auth` ──> `gateway` ──> `identity-service` ──> `postgres`.
+* **Under the Hood**: Browser calls `/api/auth` ──> `api-gateway` ──> `auth-service` ──> `postgres`.
 * **Testing Step**:
   1. Click **Register** in the UI, fill in the credentials, and submit.
   2. Log in using the registered credentials.
   3. Ensure a login session is created and you are redirected to the user Dashboard.
 
 ### 2. Upload and Parse Medical Records (OCR Upload Section)
-* **Under the Hood**: Browser calls `/api/documents/upload` ──> `gateway` ──> `ocr-service`. The service uploads the document to Azure Blob Storage and sends it to Azure Document Intelligence for OCR parsing.
+* **Under the Hood**: Browser calls `/api/documents` ──> `api-gateway` ──> `document-service`. The service uploads the document to Azure Blob Storage and sends it to Azure Document Intelligence for OCR parsing.
 * **Testing Step**:
   1. Go to the **Medical Documents** page in the UI.
   2. Upload a sample medical report PDF/Image (e.g., blood test report).
   3. Verify that the file successfully uploads, status changes to **Parsed**, and extracted lab metrics (such as heart rate, blood sugar, or cholesterol levels) display automatically in the dashboard.
 
 ### 3. Generate Personalized Diet Plan (Diet Planner Section)
-* **Under the Hood**: Browser calls `/api/diet/generate` ──> `gateway` ──> `nutrition-service` ──> Azure OpenAI (`gpt-4` model).
+* **Under the Hood**: Browser calls `/api/diet-plan/generate` ──> `api-gateway` ──> `diet-service` ──> Azure OpenAI (`gpt-4` model).
 * **Testing Step**:
   1. Go to the **Diet Planner** section.
   2. Input target health goals (e.g., "Reduce cholesterol, high protein") and dietary restrictions (e.g., "Vegetarian").
@@ -238,15 +239,15 @@ Open your browser and navigate to **`http://localhost:3000`**. Test the followin
 
 ### 4. Meal Reminder Emails (Service Bus + SMTP Relay)
 * **Under the Hood**: 
-  - `nutrition-service` publishes a meal schedule reminder to the Azure Service Bus topic `meal-reminders`.
-  - `email-service` consumes the message from the subscription `email-sender` and triggers SMTP relay to mail out the reminder.
+  - `diet-service` publishes a meal schedule reminder to the Azure Service Bus topic `meal-reminders`.
+  - `notification-service` consumes the message from the subscription `email-sender` and triggers SMTP relay to mail out the reminder.
 * **Testing Step**:
   1. Set a daily meal reminder time in the **Reminders** UI page.
   2. Wait for the scheduled window (or trigger a reminder event from the UI).
   3. Check the inbox of the email account used during registration to verify that the meal reminder email has been successfully delivered.
 
 ### 5. Health Vitals Logs (Dashboard Vitals Section)
-* **Under the Hood**: Browser calls `/api/vitals` ──> `gateway` ──> `vitals-service`.
+* **Under the Hood**: Browser calls `/api/health-tracker` ──> `api-gateway` ──> `health-service`.
 * **Testing Step**:
   1. Go to the **Vitals Log** page.
   2. Input measurements like Blood Pressure, Weight, and Blood Sugar.

@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.models.document import Document
 from app.models.diet_plan import DietPlan
-from app.models.user import User, FoodAllergy
+from app.models.user import User, FoodAllergy, PatientProfile
 from app.services.openai_service import generate_diet_plan
 from app.services.service_bus_service import publish_meal_reminders
 
@@ -45,9 +45,14 @@ def create_diet_plan(
         # 1. Fetch and verify documents
         documents = []
         combined_ocr = ""
-        for doc_id in document_ids:
+        import uuid
+        for doc_id_str in document_ids:
+            try:
+                doc_uuid = uuid.UUID(doc_id_str) if isinstance(doc_id_str, str) else doc_id_str
+            except ValueError:
+                continue
             doc = db.query(Document).filter(
-                Document.id == doc_id,
+                Document.id == doc_uuid,
                 Document.user_id == user.id,
                 Document.ocr_status == "completed",
             ).first()
@@ -71,10 +76,17 @@ def create_diet_plan(
             for a in allergies
         ]
 
-        # 3. Call OpenAI
+        # 3. Gather patient profile (medical conditions and dietary preferences)
+        patient_profile = db.query(PatientProfile).filter(PatientProfile.user_id == user.id).first()
+        medical_conditions = patient_profile.medical_conditions if patient_profile else None
+        dietary_preferences = patient_profile.dietary_preferences if patient_profile else None
+
+        # 4. Call OpenAI
         plan_data = generate_diet_plan(
             ocr_content=combined_ocr,
             allergies=allergy_list,
+            medical_conditions=medical_conditions,
+            dietary_preferences=dietary_preferences,
             additional_notes=additional_notes,
         )
 

@@ -18,6 +18,11 @@ class Settings(BaseSettings):
 
     APPLICATIONINSIGHTS_CONNECTION_STRING: str = ""
 
+    AZURE_OPENAI_ENDPOINT: str = ""
+    AZURE_OPENAI_KEY: str = ""
+    AZURE_OPENAI_DEPLOYMENT_NAME: str = "gpt-4"
+    AZURE_OPENAI_API_VERSION: str = "2024-02-01"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
