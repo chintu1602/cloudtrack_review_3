@@ -107,7 +107,7 @@ def validate_document_with_ai(ocr_content: str, original_filename: str) -> dict:
             ],
             response_format={"type": "json_object"},
             temperature=0.0,
-            max_tokens=500,
+            max_completion_tokens=500,
         )
         
         result = json.loads(response.choices[0].message.content)

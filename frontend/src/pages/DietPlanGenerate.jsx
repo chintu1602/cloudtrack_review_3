@@ -80,7 +80,7 @@ export default function DietPlanGenerate() {
 
               {error && <div className="alert alert-danger"><i className="fas fa-exclamation-circle me-2"></i>{error}</div>}
               <button className="btn btn-nutriai-primary w-100" onClick={handleGenerate} disabled={generating}>
-                {generating ? <><span className="spinner-border spinner-border-sm me-2"></span>Generating with GPT-4...</> : <><i className="fas fa-magic me-2"></i>Generate Diet Plan</>}
+                {generating ? <><span className="spinner-border spinner-border-sm me-2"></span>Generating with AI...</> : <><i className="fas fa-magic me-2"></i>Generate Diet Plan</>}
               </button>
             </div>
 
@@ -90,7 +90,7 @@ export default function DietPlanGenerate() {
                 <div className="content-card text-center py-5">
                   <div className="spinner-border text-success mb-3" style={{ width: '3rem', height: '3rem' }}><span className="visually-hidden">Loading...</span></div>
                   <h5 className="fw-bold">Analyzing Your Documents...</h5>
-                  <p className="text-muted">GPT-4 is reviewing your medical data and creating a personalized plan</p>
+                  <p className="text-muted">The AI engine is reviewing your medical data and creating a personalized plan</p>
                 </div>
               )}
 

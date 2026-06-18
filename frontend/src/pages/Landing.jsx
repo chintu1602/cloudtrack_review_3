@@ -75,7 +75,7 @@ export default function Landing() {
                 </a>
               </div>
               <div className="mt-4 d-flex gap-4">
-                <div><div className="fw-bold fs-4">GPT-4</div><small style={{ opacity: 0.7 }}>AI Engine</small></div>
+                <div><div className="fw-bold fs-4">OpenAI</div><small style={{ opacity: 0.7 }}>AI Engine</small></div>
                 <div><div className="fw-bold fs-4">100%</div><small style={{ opacity: 0.7 }}>Allergy Safe</small></div>
                 <div><div className="fw-bold fs-4">HIPAA</div><small style={{ opacity: 0.7 }}>Compliant</small></div>
               </div>
@@ -96,7 +96,7 @@ export default function Landing() {
           </div>
           <div className="row g-4">
             {[
-              { icon: 'fa-brain', color: 'green', title: 'AI Diet Planning', desc: 'GPT-4 analyzes your medical reports and generates personalized weekly meal plans with precise nutritional guidelines.' },
+              { icon: 'fa-brain', color: 'green', title: 'AI Diet Planning', desc: 'Our AI engine analyzes your medical reports and generates personalized weekly meal plans with precise nutritional guidelines.' },
               { icon: 'fa-file-medical-alt', color: 'blue', title: 'Smart Document OCR', desc: 'Upload lab reports and prescriptions. Azure AI extracts and understands your medical data automatically.' },
               { icon: 'fa-shield-alt', color: 'teal', title: 'Allergy Protection', desc: 'Your food allergies are always front and center. Our AI never recommends foods that could trigger reactions.' },
               { icon: 'fa-chart-line', color: 'orange', title: 'Health Tracking', desc: 'Track weight, blood sugar, blood pressure, and meals with interactive charts to monitor your progress.' },
@@ -123,7 +123,7 @@ export default function Landing() {
           <div className="row g-4">
             {[
               { num: '1', title: 'Upload Documents', desc: 'Upload your lab reports, prescriptions, or medical documents. Our AI-powered OCR extracts all the important data.' },
-              { num: '2', title: 'AI Analysis', desc: 'GPT-4 analyzes your medical data along with your allergies and preferences to create a safe, personalized plan.' },
+              { num: '2', title: 'AI Analysis', desc: 'The AI engine analyzes your medical data along with your allergies and preferences to create a safe, personalized plan.' },
               { num: '3', title: 'Get Your Plan', desc: 'Receive a detailed weekly meal plan with foods to eat, foods to avoid, nutritional guidelines, and allergy warnings.' },
             ].map((s, i) => (
               <div key={i} className="col-md-4">

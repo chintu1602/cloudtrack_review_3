@@ -3,7 +3,7 @@ import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 
 const faqs = [
-  { q: 'How does NutriAI generate diet plans?', a: 'NutriAI uses GPT-4, a state-of-the-art AI model from Azure OpenAI, to analyze your medical documents (lab reports, prescriptions) and generate personalized diet plans. The AI considers your medical conditions, food allergies, and dietary preferences to create safe, practical meal plans.' },
+  { q: 'How does NutriAI generate diet plans?', a: 'NutriAI uses state-of-the-art AI models from Azure OpenAI to analyze your medical documents (lab reports, prescriptions) and generate personalized diet plans. The AI considers your medical conditions, food allergies, and dietary preferences to create safe, practical meal plans.' },
   { q: 'What types of documents can I upload?', a: 'You can upload PDF documents, PNG images, and JPG/JPEG images up to 10MB in size. Common uploads include blood test reports, medical prescriptions, diagnostic reports, and health assessment documents.' },
   { q: 'How does the OCR processing work?', a: 'After uploading, your document is sent to Azure Document Intelligence for OCR (Optical Character Recognition). This AI service extracts all text, tables, and key-value pairs from your document. Processing typically takes 30-60 seconds.' },
   { q: 'How are my food allergies handled?', a: 'Your food allergies are stored securely and are always included in every diet plan generation request. The AI is explicitly instructed to NEVER recommend foods containing your allergens, and any potential allergen-containing foods are flagged in the "Foods to Avoid" section with appropriate risk levels.' },
