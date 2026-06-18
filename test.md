@@ -152,6 +152,9 @@ cp .env.example .env
 Open the `.env` file and populate the credentials retrieved from Step 1:
 
 ```env
+# Docker Registry / ACR Name (e.g. nutriaiacr.azurecr.io in production)
+REGISTRY=nutriai_acr
+
 # Database & Authentication
 DATABASE_URL=postgresql://nutriai_user:nutriai_password@postgres:5432/nutriai
 JWT_SECRET_KEY=super-secret-jwt-key-for-development
@@ -196,9 +199,6 @@ APP_URL=http://localhost:3000
 Start the local multi-container development environment:
 
 ```bash
-# Set registry namespace locally (defaults to nutriai_acr)
-export REGISTRY=nutriai_acr
-
 # Build and start services
 docker compose up --build
 ```
