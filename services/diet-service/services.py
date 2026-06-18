@@ -409,6 +409,25 @@ def publish_meal_reminders(diet_plan: DietPlan, user_email: str):
                         sender.send_messages(msg)
                         messages_sent += 1
 
+                # Send an immediate Welcome reminder to verify SMTP configuration in real time
+                if user_email:
+                    welcome_body = json.dumps({
+                        "user_id": str(diet_plan.user_id),
+                        "user_email": user_email,
+                        "meal_type": "Welcome",
+                        "foods_to_eat": (foods_eat[:3] if foods_eat else []),
+                        "foods_to_avoid": (foods_avoid[:3] if foods_avoid else []),
+                        "day_name": "Today",
+                        "meal_description": "Welcome to NutriAI! Your personalized diet plan is ready. This is an immediate test notification to confirm your email alerts are functioning correctly."
+                    })
+                    welcome_msg = ServiceBusMessage(
+                        body=welcome_body,
+                        content_type="application/json",
+                        subject="meal-reminder-welcome",
+                    )
+                    sender.send_messages(welcome_msg)
+                    messages_sent += 1
+
                 logger.info(f"Published {messages_sent} meal reminder messages to Service Bus")
 
     except ImportError:
@@ -526,117 +545,252 @@ def get_diet_plan_detail(db: Session, plan_id: str, user_id: str) -> Optional[Di
 
 def generate_diet_plan_pdf(plan: DietPlan) -> bytes:
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5 * inch, bottomMargin=0.5 * inch)
+    # Margins set to 0.75 in (leaving 7.0 in printable width)
+    doc = SimpleDocTemplate(
+        buffer, pagesize=letter,
+        leftMargin=0.75 * inch, rightMargin=0.75 * inch,
+        topMargin=0.75 * inch, bottomMargin=0.75 * inch
+    )
 
     styles = getSampleStyleSheet()
+    
+    # Redesigned typography hierarchy
     title_style = ParagraphStyle(
         "CustomTitle", parent=styles["Title"],
-        fontSize=20, textColor=colors.HexColor("#2E7D32"), spaceAfter=12,
+        fontSize=20, leading=24, textColor=colors.HexColor("#1E293B"),
+        alignment=0, spaceAfter=8
     )
+    
     heading_style = ParagraphStyle(
         "CustomHeading", parent=styles["Heading2"],
-        fontSize=14, textColor=colors.HexColor("#1565C0"), spaceAfter=8, spaceBefore=12,
+        fontSize=12, leading=16, textColor=colors.HexColor("#0F172A"),
+        spaceAfter=6, spaceBefore=14, keepWithNext=True
     )
-    body_style = styles["Normal"]
-    body_style.fontSize = 10
-    body_style.leading = 14
+    
+    body_style = ParagraphStyle(
+        "CustomBody", parent=styles["Normal"],
+        fontSize=9, leading=13, textColor=colors.HexColor("#334155")
+    )
+
+    table_header_style = ParagraphStyle(
+        "TableHeader", parent=styles["Normal"],
+        fontSize=8.5, leading=11, textColor=colors.white, fontName="Helvetica-Bold"
+    )
+    
+    table_cell_style = ParagraphStyle(
+        "TableCell", parent=styles["Normal"],
+        fontSize=8, leading=11, textColor=colors.HexColor("#334155")
+    )
 
     elements = []
 
-    elements.append(Paragraph(f"🥗 {plan.plan_title}", title_style))
-    elements.append(Paragraph(f"Generated: {plan.generated_at.strftime('%B %d, %Y')}", body_style))
+    # Beautiful top branding header band
+    elements.append(Paragraph("<font color='#64748B' size='7'><b>NUTRIAI HEALTH PORTAL</b></font>", body_style))
+    elements.append(Paragraph(plan.plan_title, title_style))
+    elements.append(Paragraph(f"Generated on {plan.generated_at.strftime('%B %d, %Y')}", body_style))
+    
+    # Visual divider
+    divider = Table([[""]], colWidths=[7.0 * inch], rowHeights=[2])
+    divider.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#0F766E")),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    elements.append(divider)
     elements.append(Spacer(1, 12))
 
     if plan.plan_summary:
         elements.append(Paragraph("Plan Summary", heading_style))
         elements.append(Paragraph(plan.plan_summary, body_style))
-        elements.append(Spacer(1, 8))
+        elements.append(Spacer(1, 10))
 
+    # 1. Foods to Eat Table
     if plan.foods_to_eat:
         elements.append(Paragraph("✅ Foods to Eat", heading_style))
-        table_data = [["Food", "Reason", "Portion", "Timing"]]
+        table_data = [[
+            Paragraph("<b>Food</b>", table_header_style),
+            Paragraph("<b>Reason</b>", table_header_style),
+            Paragraph("<b>Portion</b>", table_header_style),
+            Paragraph("<b>Timing</b>", table_header_style)
+        ]]
         for food in plan.foods_to_eat:
             table_data.append([
-                food.get("food_name", ""), food.get("reason", ""),
-                food.get("portion_size", ""), food.get("timing", ""),
+                Paragraph(food.get("food_name", "") or "", table_cell_style),
+                Paragraph(food.get("reason", "") or "", table_cell_style),
+                Paragraph(food.get("portion_size", "") or "", table_cell_style),
+                Paragraph(food.get("timing", "") or "", table_cell_style),
             ])
-        table = Table(table_data, colWidths=[1.5 * inch, 2.5 * inch, 1.2 * inch, 1.3 * inch])
+        table = Table(table_data, colWidths=[1.8 * inch, 2.6 * inch, 1.2 * inch, 1.4 * inch])
         table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2E7D32")),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0F766E")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTSIZE", (0, 0), (-1, -1), 8),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.HexColor("#E8F5E9"), colors.white]),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.HexColor("#F8FAFC"), colors.white]),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
         ]))
         elements.append(table)
-        elements.append(Spacer(1, 8))
+        elements.append(Spacer(1, 10))
 
+    # 2. Foods to Avoid Table
     if plan.foods_to_avoid:
         elements.append(Paragraph("❌ Foods to Avoid", heading_style))
-        table_data = [["Food", "Reason", "Risk Level"]]
+        table_data = [[
+            Paragraph("<b>Food</b>", table_header_style),
+            Paragraph("<b>Reason</b>", table_header_style),
+            Paragraph("<b>Risk Level</b>", table_header_style)
+        ]]
         for food in plan.foods_to_avoid:
             table_data.append([
-                food.get("food_name", ""), food.get("reason", ""), food.get("risk_level", ""),
+                Paragraph(food.get("food_name", "") or "", table_cell_style),
+                Paragraph(food.get("reason", "") or "", table_cell_style),
+                Paragraph(food.get("risk_level", "") or "", table_cell_style),
             ])
-        table = Table(table_data, colWidths=[2 * inch, 3 * inch, 1.5 * inch])
+        table = Table(table_data, colWidths=[2.2 * inch, 3.4 * inch, 1.4 * inch])
         table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#C62828")),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#991B1B")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTSIZE", (0, 0), (-1, -1), 8),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.HexColor("#FFEBEE"), colors.white]),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.HexColor("#FFF5F5"), colors.white]),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
         ]))
         elements.append(table)
-        elements.append(Spacer(1, 8))
+        elements.append(Spacer(1, 10))
 
+    # 3. Weekly Meal Plan Table
     if plan.weekly_meal_plan:
         elements.append(Paragraph("📅 Weekly Meal Plan", heading_style))
         days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+        table_data = []
         for day in days:
             day_plan = plan.weekly_meal_plan.get(day, {})
             if day_plan:
-                elements.append(Paragraph(f"<b>{day.capitalize()}</b>", body_style))
+                meals_paragraphs = []
                 for meal_type in ["breakfast", "lunch", "dinner", "snacks"]:
                     meal = day_plan.get(meal_type, "")
                     if meal:
-                        elements.append(Paragraph(f"  • {meal_type.capitalize()}: {meal}", body_style))
-                elements.append(Spacer(1, 4))
+                        meals_paragraphs.append(f"<b>{meal_type.capitalize()}:</b> {meal}")
+                meals_html = "<br/>".join(meals_paragraphs)
+                table_data.append([
+                    Paragraph(f"<b>{day.capitalize()}</b>", table_cell_style),
+                    Paragraph(meals_html, table_cell_style)
+                ])
+        if table_data:
+            table = Table(table_data, colWidths=[1.2 * inch, 5.8 * inch])
+            table.setStyle(TableStyle([
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+                ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.HexColor("#F8FAFC"), colors.white]),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ]))
+            elements.append(table)
+            elements.append(Spacer(1, 10))
 
+    # 4. Nutritional Guidelines Dashboard
     if plan.nutritional_guidelines:
         elements.append(Paragraph("📊 Nutritional Guidelines", heading_style))
         ng = plan.nutritional_guidelines
-        guidelines_text = f"""
-        Daily Calories: {ng.get('daily_calories', 'N/A')} kcal |
-        Protein: {ng.get('protein_grams', 'N/A')}g |
-        Carbs: {ng.get('carbs_grams', 'N/A')}g |
-        Fats: {ng.get('fats_grams', 'N/A')}g |
-        Fiber: {ng.get('fiber_grams', 'N/A')}g |
-        Water: {ng.get('water_liters', 'N/A')}L
-        """
-        elements.append(Paragraph(guidelines_text.strip(), body_style))
-        elements.append(Spacer(1, 8))
+        
+        metrics_headers = [
+            Paragraph("<b>Calories</b>", table_header_style),
+            Paragraph("<b>Protein</b>", table_header_style),
+            Paragraph("<b>Carbs</b>", table_header_style),
+            Paragraph("<b>Fats</b>", table_header_style),
+            Paragraph("<b>Fiber</b>", table_header_style),
+            Paragraph("<b>Water</b>", table_header_style)
+        ]
+        metrics_values = [
+            Paragraph(f"{ng.get('daily_calories', 'N/A')} kcal", table_cell_style),
+            Paragraph(f"{ng.get('protein_grams', 'N/A')}g", table_cell_style),
+            Paragraph(f"{ng.get('carbs_grams', 'N/A')}g", table_cell_style),
+            Paragraph(f"{ng.get('fats_grams', 'N/A')}g", table_cell_style),
+            Paragraph(f"{ng.get('fiber_grams', 'N/A')}g", table_cell_style),
+            Paragraph(f"{ng.get('water_liters', 'N/A')}L", table_cell_style)
+        ]
+        
+        table_data = [metrics_headers, metrics_values]
+        col_w = (7.0 / 6.0) * inch
+        table = Table(table_data, colWidths=[col_w] * 6)
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1E293B")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(table)
+        elements.append(Spacer(1, 10))
 
+    # 5. Allergy Notes Callout Box
     if plan.allergy_notes:
         elements.append(Paragraph("⚠️ Allergy Notes", heading_style))
-        for note in plan.allergy_notes:
-            elements.append(Paragraph(f"• {note}", body_style))
-        elements.append(Spacer(1, 8))
+        notes_text = "<br/>".join([f"• {note}" for note in plan.allergy_notes])
+        alert_style = ParagraphStyle(
+            "AllergyAlert", parent=styles["Normal"],
+            fontSize=8.5, leading=12, textColor=colors.HexColor("#78350F")
+        )
+        table_data = [[Paragraph(notes_text, alert_style)]]
+        table = Table(table_data, colWidths=[7.0 * inch])
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FEF3C7")),
+            ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#FBBF24")),
+            ("LINELEFT", (0, 0), (-0, -1), 3.0, colors.HexColor("#D97706")),
+            ("TOPPADDING", (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ("LEFTPADDING", (0, 0), (-1, -1), 12),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+        ]))
+        elements.append(table)
+        elements.append(Spacer(1, 10))
 
+    # 6. Additional Recommendations Callout Box
     if plan.additional_recommendations:
         elements.append(Paragraph("💡 Additional Recommendations", heading_style))
-        for rec in plan.additional_recommendations:
-            elements.append(Paragraph(f"• {rec}", body_style))
+        recs_text = "<br/>".join([f"• {rec}" for rec in plan.additional_recommendations])
+        info_style = ParagraphStyle(
+            "InfoAlert", parent=styles["Normal"],
+            fontSize=8.5, leading=12, textColor=colors.HexColor("#1E3A8A")
+        )
+        table_data = [[Paragraph(recs_text, info_style)]]
+        table = Table(table_data, colWidths=[7.0 * inch])
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#EFF6FF")),
+            ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#BFDBFE")),
+            ("LINELEFT", (0, 0), (-0, -1), 3.0, colors.HexColor("#3B82F6")),
+            ("TOPPADDING", (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ("LEFTPADDING", (0, 0), (-1, -1), 12),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+        ]))
+        elements.append(table)
+        elements.append(Spacer(1, 12))
 
-    elements.append(Spacer(1, 20))
-    footer_style = ParagraphStyle("Footer", parent=body_style, fontSize=8, textColor=colors.grey)
-    elements.append(Paragraph(
-        "Generated by NutriAI Health Portal. This plan is AI-generated and should be reviewed by a healthcare professional.",
-        footer_style,
-    ))
+    # Custom canvas footer maker for page numbers and branding
+    def add_footer(canvas, doc):
+        canvas.saveState()
+        canvas.setFont('Helvetica', 8)
+        canvas.setFillColor(colors.HexColor("#64748B"))
+        canvas.drawString(0.75 * inch, 0.4 * inch, "NutriAI Health Portal | Personalized Guidance")
+        canvas.drawRightString(8.5 * inch - 0.75 * inch, 0.4 * inch, f"Page {doc.page}")
+        canvas.setStrokeColor(colors.HexColor("#E2E8F0"))
+        canvas.setLineWidth(0.5)
+        canvas.line(0.75 * inch, 0.5 * inch, 8.5 * inch - 0.75 * inch, 0.5 * inch)
+        canvas.restoreState()
 
-    doc.build(elements)
+    doc.build(elements, onFirstPage=add_footer, onLaterPages=add_footer)
     pdf_bytes = buffer.getvalue()
     buffer.close()
     return pdf_bytes
+
