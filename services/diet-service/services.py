@@ -341,13 +341,8 @@ def publish_meal_reminders(diet_plan: DietPlan, user_email: str):
             "dinner": 19,     # 7:00 PM UTC
         }
 
-        days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-        today = datetime.utcnow().date()
-        # Find next Monday
-        days_ahead = (7 - today.weekday()) % 7
-        if days_ahead == 0:
-            days_ahead = 7
-        next_monday = today + timedelta(days=days_ahead)
+        now = datetime.utcnow()
+        today = now.date()
 
         servicebus_client = ServiceBusClient.from_connection_string(
             settings.AZURE_SERVICE_BUS_CONNECTION_STRING
@@ -359,11 +354,21 @@ def publish_meal_reminders(diet_plan: DietPlan, user_email: str):
                 messages_sent = 0
                 weekly_plan = diet_plan.weekly_meal_plan or {}
 
-                for day_index, day_name in enumerate(days):
-                    day_date = next_monday + timedelta(days=day_index)
+                for day_index in range(7):
+                    day_date = today + timedelta(days=day_index)
+                    day_name = day_date.strftime("%A").lower()
                     day_plan = weekly_plan.get(day_name, {})
 
                     for meal_type, hour in meal_times.items():
+                        scheduled_time = datetime(
+                            day_date.year, day_date.month, day_date.day,
+                            hour, 0, 0
+                        )
+
+                        # Only schedule if the meal time is in the future
+                        if scheduled_time <= now:
+                            continue
+
                         meal_key = "snacks" if meal_type == "snack" else meal_type
                         meal_description = day_plan.get(meal_key, day_plan.get(meal_type, ""))
 
@@ -394,11 +399,6 @@ def publish_meal_reminders(diet_plan: DietPlan, user_email: str):
                             "day_name": day_name.capitalize(),
                             "meal_description": meal_description,
                         })
-
-                        scheduled_time = datetime(
-                            day_date.year, day_date.month, day_date.day,
-                            hour, 0, 0
-                        )
 
                         msg = ServiceBusMessage(
                             body=message_body,
