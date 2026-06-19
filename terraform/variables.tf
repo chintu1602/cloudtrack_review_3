@@ -92,3 +92,17 @@ variable "smtp_password" {
   sensitive   = true
   default     = "wnkbmlgmpryzljqi"
 }
+
+variable "openai_model_name" {
+  type        = string
+  description = "The name/deployment name of the OpenAI model to deploy (e.g., gpt-4, gpt-5.1)"
+  default     = "gpt-4"
+}
+
+variable "openai_api_version" {
+  type        = string
+  description = "The API version for the OpenAI service"
+  default     = "2024-02-01"
+}
+
+

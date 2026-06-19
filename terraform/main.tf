@@ -81,6 +81,8 @@ module "integration" {
   location            = azurerm_resource_group.rg.location
   vnet_id             = module.vnet.vnet_id
   endpoints_subnet_id = module.vnet.vnet_subnets[3] # pe-subnet (index 3)
+  openai_model_name    = var.openai_model_name
+  openai_api_version   = var.openai_api_version
 }
 
 # --- Module 7: AKS & AGIC Ingress (Official Registry Module) ---

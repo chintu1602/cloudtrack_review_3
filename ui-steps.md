@@ -149,17 +149,19 @@ To secure the application, we isolate all backend components and databases insid
    * Under **Entities** ➔ **Topics**, click **+ Topic** and create topic `meal-reminders`.
    * Under the topic `meal-reminders` ➔ **Subscriptions**, click **+ Subscription** and create subscription `email-sender`.
 
-### Step 4.4: Create Document Intelligence & Azure OpenAI (AI Foundry)
+### Step 4.4: Create Document Intelligence & Azure OpenAI (Azure AI Foundry / Microsoft Foundry)
 1. **Document Intelligence:**
    * Search for **Document Intelligence** (under AI services) and click **+ Create**.
    * Name: `nutriai-doc-intelligence`, Pricing Tier: `S0`.
    * Go to **Networking** ➔ Set Public access to **Disabled**.
    * Add a **Private Endpoint**: Target `cognitiveservices`, Subnet `pe-subnet`, DNS Zone `privatelink.cognitiveservices.azure.com`.
-2. **Azure OpenAI:**
+2. **Azure OpenAI via Azure AI Foundry / Microsoft Foundry:**
    * Search for **Azure OpenAI** and click **+ Create**.
    * Name: `nutriai-openai-service`, Pricing Tier: `S0`.
-   * Deploy the model (e.g. `gpt-4` or `gpt-35-turbo`) inside Azure AI Studio under deployment name `gpt-4`.
-   * Go to **Networking** ➔ Set Public access to **Disabled**.
+   * Deploy the model inside the **Azure AI Foundry Portal / Azure AI Studio** (ai.azure.com):
+     * Model Name: `gpt-5.1` (version `2025-11-13` or newer).
+     * Deployment Name: `gpt-5.1` (this deployment name matches what is used in the app configuration and the Terraform script).
+   * Go to **Networking** on the Azure OpenAI resource ➔ Set Public access to **Disabled**.
    * Add a **Private Endpoint**: Target `cognitiveservices`, Subnet `pe-subnet`, DNS Zone `privatelink.cognitiveservices.azure.com`.
 
 ---
@@ -513,7 +515,7 @@ Terraform will provision all of the following in one command:
 - ✅ Key Vault with Private Endpoint
 - ✅ PostgreSQL Flexible Server (Zone-Redundant HA)
 - ✅ Blob Storage with Private Endpoint
-- ✅ Azure OpenAI + Document Intelligence + Service Bus
+- ✅ Azure OpenAI (with deployed gpt-5.1 model via Azure AI Foundry / Microsoft Foundry) + Document Intelligence + Service Bus
 - ✅ AKS cluster (2 nodes, AGIC, CSI driver, ACR attached)
 - ✅ Entra ID App Registration + Service Principal
 - ✅ Azure Bastion + Public IP
@@ -575,7 +577,7 @@ echo "All images pushed successfully."
 
 ---
 
-### Step 9.8: Update `secret-provider.yaml` with Terraform Outputs
+### Step 9.8: Update Manifests with Terraform Outputs
 
 Open `manifests/secret-provider.yaml` and replace the placeholder values in **all 8** `SecretProviderClass` definitions with the real values from Step 9.6:
 
@@ -586,15 +588,33 @@ keyvaultName: "nutriai-kv-1602"
 tenantId: "<VALUE OF: terraform output entra_tenant_id>"
 ```
 
-**Quick sed command (run from project root on Linux/macOS, or edit manually on Windows):**
+Also, update `manifests/diet-service.yaml` to fill in the dynamic OpenAI model deployment name and API version:
+
+```yaml
+# Replace in diet-service.yaml env block:
+AZURE_OPENAI_DEPLOYMENT_NAME: "<VALUE OF: terraform output openai_deployment_name>"
+AZURE_OPENAI_API_VERSION: "<VALUE OF: terraform output openai_api_version>"
+```
+
+**Quick sed command to automate both files (run from project root on Linux/macOS, or edit manually on Windows/PowerShell):**
 ```bash
+# Retrieve outputs
 KUBELET_ID=$(cd terraform && terraform output -raw aks_kubelet_identity_client_id)
 TENANT_ID=$(cd terraform && terraform output -raw entra_tenant_id)
+OPENAI_DEPLOYMENT=$(cd terraform && terraform output -raw openai_deployment_name)
+OPENAI_API_VERSION=$(cd terraform && terraform output -raw openai_api_version)
 
+# Update secret provider class
 sed -i \
   -e "s/your-identity-client-id/${KUBELET_ID}/g" \
   -e "s/placeholder-entra-tenant-id/${TENANT_ID}/g" \
   manifests/secret-provider.yaml
+
+# Update diet service OpenAI configuration
+sed -i \
+  -e "s/placeholder-openai-deployment-name/${OPENAI_DEPLOYMENT}/g" \
+  -e "s/placeholder-openai-api-version/${OPENAI_API_VERSION}/g" \
+  manifests/diet-service.yaml
 ```
 
 ---

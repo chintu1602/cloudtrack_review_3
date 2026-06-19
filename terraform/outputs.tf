@@ -67,3 +67,14 @@ output "application_insights_name" {
   value       = azurerm_application_insights.appinsights.name
   description = "The name of the Application Insights resource"
 }
+
+output "openai_deployment_name" {
+  value       = var.openai_model_name
+  description = "The deployment name of the OpenAI model"
+}
+
+output "openai_api_version" {
+  value       = var.openai_api_version
+  description = "The API version for the OpenAI service"
+}
+

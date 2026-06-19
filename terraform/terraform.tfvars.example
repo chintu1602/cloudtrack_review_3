@@ -32,3 +32,9 @@ aks_cluster_name        = "your-aks-cluster-name"
 # SMTP Configuration (e.g., for sending meal reminders via Gmail App Passwords)
 smtp_username           = "your_smtp_email@example.com"
 smtp_password           = "your_smtp_app_password"
+
+# Azure OpenAI / AI Foundry Model Settings (dynamic deployment)
+# Configure these based on model availability in your Azure region
+openai_model_name       = "gpt-4"
+openai_api_version      = "2024-02-01"
+

@@ -77,7 +77,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "cog_dns_link" {
 }
 
 
-# --- Azure OpenAI ---
+# --- Azure OpenAI & AI Foundry Model Deployment ---
 resource "azurerm_cognitive_account" "openai" {
   name                = "nutriai-openai-service"
   location            = var.location
@@ -86,6 +86,19 @@ resource "azurerm_cognitive_account" "openai" {
   sku_name            = "S0"
   public_network_access_enabled = false
 }
+
+resource "azurerm_cognitive_deployment" "openai_model" {
+  name                 = var.openai_model_name
+  cognitive_account_id = azurerm_cognitive_account.openai.id
+  model {
+    format  = "OpenAI"
+    name    = var.openai_model_name
+  }
+  scale {
+    type = "Standard"
+  }
+}
+
 
 # OpenAI Private Endpoint
 resource "azurerm_private_endpoint" "openai_pe" {

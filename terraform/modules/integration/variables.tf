@@ -17,3 +17,15 @@ variable "endpoints_subnet_id" {
   type        = string
   description = "The ID of the subnet for Private Endpoint"
 }
+
+variable "openai_model_name" {
+  type        = string
+  description = "The name/deployment name of the OpenAI model to deploy"
+}
+
+variable "openai_api_version" {
+  type        = string
+  description = "The API version for the OpenAI service"
+}
+
+

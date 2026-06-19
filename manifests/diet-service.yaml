@@ -40,9 +40,9 @@ spec:
                   name: diet-service-secrets
                   key: AZURE_OPENAI_KEY
             - name: AZURE_OPENAI_DEPLOYMENT_NAME
-              value: "gpt-4"
+              value: "placeholder-openai-deployment-name"
             - name: AZURE_OPENAI_API_VERSION
-              value: "2024-02-01"
+              value: "placeholder-openai-api-version"
             - name: AZURE_SERVICE_BUS_CONNECTION_STRING
               valueFrom:
                 secretKeyRef:
