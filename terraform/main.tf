@@ -87,7 +87,7 @@ module "integration" {
 module "aks" {
   source                           = "Azure/aks/azurerm"
   version                          = "8.0.0"
-  resource_group_name              = azurerm_resource_group.rg.name
+  resource_group_name              = element(split("/", azurerm_resource_group.rg.id), 4)
   location                         = azurerm_resource_group.rg.location
   cluster_name                     = var.aks_cluster_name
   prefix                           = "nutriai"
@@ -121,7 +121,7 @@ module "aks" {
 module "compute_vm" {
   source              = "Azure/compute/azurerm"
   version             = "5.3.0"
-  resource_group_name = azurerm_resource_group.rg.name
+  resource_group_name = element(split("/", azurerm_resource_group.rg.id), 4)
   vm_hostname         = "nutriai-build-vm"
   vm_os_publisher     = "Canonical"
   vm_os_offer         = "0001-com-ubuntu-server-jammy"
