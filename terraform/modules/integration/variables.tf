@@ -23,15 +23,13 @@ variable "openai_model_name" {
   description = "The name/deployment name of the OpenAI model to deploy"
 }
 
-variable "openai_api_version" {
-  type        = string
-  description = "The API version for the OpenAI service"
-}
-
 variable "openai_model_version" {
   type        = string
   description = "The version of the OpenAI model to deploy (e.g., turbo-2024-04-09)"
 }
 
-
-
+variable "openai_location" {
+  type        = string
+  description = "The Azure region for the OpenAI Cognitive Account (may differ from main location due to model availability)"
+  default     = "eastus2"
+}

@@ -39,7 +39,7 @@ output "app_gateway_id" {
 }
 
 output "grafana_url" {
-  value       = azurerm_dashboard_grafana.grafana.endpoint
+  value       = jsondecode(azurerm_resource_group_template_deployment.grafana.output_content).endpoint.value
   description = "The URL of the Azure Managed Grafana Dashboard"
 }
 
@@ -71,10 +71,5 @@ output "application_insights_name" {
 output "openai_deployment_name" {
   value       = var.openai_model_name
   description = "The deployment name of the OpenAI model"
-}
-
-output "openai_api_version" {
-  value       = var.openai_api_version
-  description = "The API version for the OpenAI service"
 }
 

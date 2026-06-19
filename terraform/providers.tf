@@ -3,7 +3,7 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 3.90.0"
+      version = "~> 3.116"
     }
     random = {
       source  = "hashicorp/random"
@@ -17,7 +17,7 @@ terraform {
 
   backend "azurerm" {
     resource_group_name  = "mystate-rg"
-    storage_account_name = "nutriaisttfstate"
+    storage_account_name = "nutriaisttfstate1"
     container_name       = "tfstate"
     key                  = "terraform.tfstate"
   }
@@ -29,8 +29,10 @@ provider "azurerm" {
       purge_soft_delete_on_destroy    = true
       recover_soft_deleted_key_vaults = true
     }
+    cognitive_account {
+      purge_soft_delete_on_destroy = true
+    }
   }
 }
 
 provider "azuread" {}
-

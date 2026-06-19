@@ -79,8 +79,8 @@ module "integration" {
   location             = azurerm_resource_group.rg.location
   vnet_id              = module.vnet.vnet_id
   endpoints_subnet_id  = module.vnet.vnet_subnets_name_id["pe-subnet"]
+  openai_location      = "eastus2"
   openai_model_name    = var.openai_model_name
-  openai_api_version   = var.openai_api_version
   openai_model_version = var.openai_model_version
 }
 
@@ -93,9 +93,9 @@ module "aks" {
   cluster_name                     = var.aks_cluster_name
   prefix                           = "nutriai"
   vnet_subnet_id                   = module.vnet.vnet_subnets_name_id["aks-subnet"]
-  os_disk_size_gb                  = 50
+  os_disk_size_gb                  = 30
   agents_size                      = "Standard_D2s_v3"
-  agents_count                     = 2
+  agents_count                     = 1
 
   # Attach ACR so AKS kubelet gets AcrPull role automatically
   attached_acr_id_map = {
@@ -120,6 +120,10 @@ module "aks" {
     annotations_allowed = null
     labels_allowed      = null
   }
+
+  # Network profile — service CIDR must NOT overlap with VNet CIDR (10.0.0.0/16)
+  net_profile_service_cidr   = "172.16.0.0/16"
+  net_profile_dns_service_ip = "172.16.0.10"
 }
 
 # --- Module 8: Compute Build VM (Official Registry Module) ---
@@ -166,31 +170,89 @@ resource "azurerm_monitor_workspace" "prometheus" {
   location            = azurerm_resource_group.rg.location
 }
 
-resource "azurerm_dashboard_grafana" "grafana" {
-  name                  = "nutriai-grafana"
-  resource_group_name   = azurerm_resource_group.rg.name
-  location              = azurerm_resource_group.rg.location
-  sku                   = "Standard"
-  grafana_major_version = 12
-  identity {
-    type = "SystemAssigned"
+resource "azurerm_resource_group_template_deployment" "grafana" {
+  name                = "grafana-deployment"
+  resource_group_name = azurerm_resource_group.rg.name
+  deployment_mode     = "Incremental"
+
+  parameters_content = jsonencode({
+    "grafanaName" = {
+      value = "nutriai-grafana-v2"
+    }
+    "location" = {
+      value = azurerm_resource_group.rg.location
+    }
+    "prometheusWorkspaceResourceId" = {
+      value = azurerm_monitor_workspace.prometheus.id
+    }
+  })
+
+  template_content = <<JSON
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "grafanaName": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string"
+    },
+    "prometheusWorkspaceResourceId": {
+      "type": "string"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Dashboard/grafana",
+      "apiVersion": "2023-09-01",
+      "name": "[parameters('grafanaName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard"
+      },
+      "properties": {
+        "grafanaMajorVersion": "12",
+        "publicNetworkAccess": "Enabled",
+        "grafanaIntegrations": {
+          "azureMonitorWorkspaceIntegrations": [
+            {
+              "azureMonitorWorkspaceResourceId": "[parameters('prometheusWorkspaceResourceId')]"
+            }
+          ]
+        }
+      },
+      "identity": {
+        "type": "SystemAssigned"
+      }
+    }
+  ],
+  "outputs": {
+    "principalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Dashboard/grafana', parameters('grafanaName')), '2023-09-01', 'full').identity.principalId]"
+    },
+    "endpoint": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Dashboard/grafana', parameters('grafanaName')), '2023-09-01').endpoint]"
+    }
   }
-  azure_monitor_workspace_integrations {
-    resource_id = azurerm_monitor_workspace.prometheus.id
-  }
+}
+JSON
 }
 
 resource "azurerm_role_assignment" "grafana_monitoring_reader" {
   scope                = azurerm_resource_group.rg.id
   role_definition_name = "Monitoring Reader"
-  principal_id         = azurerm_dashboard_grafana.grafana.identity[0].principal_id
+  principal_id         = jsondecode(azurerm_resource_group_template_deployment.grafana.output_content).principalId.value
 }
 
 resource "azurerm_role_assignment" "grafana_metrics_reader" {
   scope                = azurerm_monitor_workspace.prometheus.id
   role_definition_name = "Monitoring Data Reader"
-  principal_id         = azurerm_dashboard_grafana.grafana.identity[0].principal_id
+  principal_id         = jsondecode(azurerm_resource_group_template_deployment.grafana.output_content).principalId.value
 }
+
 
 resource "azurerm_monitor_data_collection_rule" "prometheus_dcr" {
   name                = "nutriai-prometheus-dcr"

@@ -5,6 +5,7 @@ resource "azurerm_servicebus_namespace" "sb" {
   resource_group_name = var.resource_group_name
   sku                 = "Premium"
   capacity            = 1
+  premium_messaging_partitions = 1
   public_network_access_enabled = false
 }
 
@@ -79,13 +80,13 @@ resource "azurerm_private_dns_zone_virtual_network_link" "cog_dns_link" {
 
 # --- Azure OpenAI & AI Foundry Model Deployment ---
 resource "azurerm_cognitive_account" "openai" {
-  name                = "nutriai-openai-service"
-  location            = var.location
+  name                = "nutriai-openai-v2"
+  location            = var.openai_location
   resource_group_name = var.resource_group_name
   kind                = "OpenAI"
   sku_name            = "S0"
   public_network_access_enabled = false
-  custom_subdomain_name         = "nutriai-openai-1602"
+  custom_subdomain_name         = "nutriai-openai-v2"
 }
 
 resource "azurerm_cognitive_deployment" "openai_model" {
@@ -127,13 +128,13 @@ resource "azurerm_private_endpoint" "openai_pe" {
 
 # --- Document Intelligence ---
 resource "azurerm_cognitive_account" "doc_intel" {
-  name                = "nutriai-doc-intelligence"
+  name                = "nutriai-doc-intel-v2"
   location            = var.location
   resource_group_name = var.resource_group_name
   kind                = "FormRecognizer"
   sku_name            = "S0"
   public_network_access_enabled = false
-  custom_subdomain_name         = "nutriai-doc-intel-1602"
+  custom_subdomain_name         = "nutriai-doc-intel-v2"
 }
 
 # Document Intelligence Private Endpoint
