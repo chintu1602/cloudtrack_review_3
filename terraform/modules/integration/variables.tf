@@ -28,4 +28,10 @@ variable "openai_api_version" {
   description = "The API version for the OpenAI service"
 }
 
+variable "openai_model_version" {
+  type        = string
+  description = "The version of the OpenAI model to deploy (e.g., turbo-2024-04-09)"
+}
+
+
 

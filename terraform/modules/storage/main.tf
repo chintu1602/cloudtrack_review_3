@@ -10,7 +10,7 @@ resource "azurerm_storage_account" "storage" {
   location                 = var.location
   account_tier             = "Standard"
   account_replication_type = "ZRS"
-  public_network_access_enabled = false
+  public_network_access_enabled = true
 }
 
 resource "azurerm_storage_container" "container" {

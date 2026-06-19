@@ -20,7 +20,7 @@ resource "azurerm_servicebus_subscription" "sub" {
 }
 
 resource "azurerm_servicebus_namespace_authorization_rule" "sb_rule" {
-  name         = "RootManageSharedAccessKey"
+  name         = "nutriai-bus-rule"
   namespace_id = azurerm_servicebus_namespace.sb.id
   listen       = true
   send         = true
@@ -85,6 +85,7 @@ resource "azurerm_cognitive_account" "openai" {
   kind                = "OpenAI"
   sku_name            = "S0"
   public_network_access_enabled = false
+  custom_subdomain_name         = "nutriai-openai-1602"
 }
 
 resource "azurerm_cognitive_deployment" "openai_model" {
@@ -93,6 +94,7 @@ resource "azurerm_cognitive_deployment" "openai_model" {
   model {
     format  = "OpenAI"
     name    = var.openai_model_name
+    version = var.openai_model_version
   }
   scale {
     type = "Standard"
@@ -131,6 +133,7 @@ resource "azurerm_cognitive_account" "doc_intel" {
   kind                = "FormRecognizer"
   sku_name            = "S0"
   public_network_access_enabled = false
+  custom_subdomain_name         = "nutriai-doc-intel-1602"
 }
 
 # Document Intelligence Private Endpoint

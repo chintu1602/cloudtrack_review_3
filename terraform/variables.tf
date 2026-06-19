@@ -105,4 +105,11 @@ variable "openai_api_version" {
   default     = "2024-02-01"
 }
 
+variable "openai_model_version" {
+  type        = string
+  description = "The version of the OpenAI model to deploy (e.g., turbo-2024-04-09)"
+  default     = "turbo-2024-04-09"
+}
+
+
 

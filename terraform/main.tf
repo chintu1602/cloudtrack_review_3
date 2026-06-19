@@ -47,7 +47,7 @@ module "keyvault" {
   resource_group_name           = azurerm_resource_group.rg.name
   location                      = azurerm_resource_group.rg.location
   vnet_id                       = module.vnet.vnet_id
-  endpoints_subnet_id           = module.vnet.vnet_subnets[3] # pe-subnet (index 3)
+  endpoints_subnet_id           = module.vnet.vnet_subnets_name_id["pe-subnet"]
   keyvault_name                 = var.keyvault_name
   public_network_access_enabled = var.keyvault_public_network_access_enabled
 }
@@ -58,7 +58,7 @@ module "database" {
   resource_group_name     = azurerm_resource_group.rg.name
   location                = azurerm_resource_group.rg.location
   vnet_id                 = module.vnet.vnet_id
-  database_subnet_id      = module.vnet.vnet_subnets[2] # db-subnet (index 2)
+  database_subnet_id      = module.vnet.vnet_subnets_name_id["db-subnet"]
   postgres_admin_user     = var.postgres_admin_user
   postgres_admin_password = var.postgres_admin_password
 }
@@ -69,18 +69,19 @@ module "storage" {
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
   vnet_id             = module.vnet.vnet_id
-  endpoints_subnet_id = module.vnet.vnet_subnets[3] # pe-subnet (index 3)
+  endpoints_subnet_id = module.vnet.vnet_subnets_name_id["pe-subnet"]
 }
 
 # --- Module 6: Integrations (Custom Local Module) ---
 module "integration" {
-  source              = "./modules/integration"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-  vnet_id             = module.vnet.vnet_id
-  endpoints_subnet_id = module.vnet.vnet_subnets[3] # pe-subnet (index 3)
+  source               = "./modules/integration"
+  resource_group_name  = azurerm_resource_group.rg.name
+  location             = azurerm_resource_group.rg.location
+  vnet_id              = module.vnet.vnet_id
+  endpoints_subnet_id  = module.vnet.vnet_subnets_name_id["pe-subnet"]
   openai_model_name    = var.openai_model_name
   openai_api_version   = var.openai_api_version
+  openai_model_version = var.openai_model_version
 }
 
 # --- Module 7: AKS & AGIC Ingress (Official Registry Module) ---
@@ -91,7 +92,7 @@ module "aks" {
   location                         = azurerm_resource_group.rg.location
   cluster_name                     = var.aks_cluster_name
   prefix                           = "nutriai"
-  vnet_subnet_id                   = module.vnet.vnet_subnets[0] # aks-subnet (index 0)
+  vnet_subnet_id                   = module.vnet.vnet_subnets_name_id["aks-subnet"]
   os_disk_size_gb                  = 50
   agents_size                      = "Standard_D2s_v3"
   agents_count                     = 2
@@ -106,11 +107,12 @@ module "aks" {
 
   # Enable Role-Based Access Control (RBAC) required for Entra/AAD integration
   role_based_access_control_enabled = true
+  rbac_aad_managed                  = true
 
   # Enable Application Gateway Ingress Controller (AGIC)
   green_field_application_gateway_for_ingress = {
     name      = "ingress-appgw"
-    subnet_id = module.vnet.vnet_subnets[1] # appgw-subnet (index 1)
+    subnet_id = module.vnet.vnet_subnets_name_id["appgw-subnet"]
   }
 
   # Enable Prometheus metrics scraping
@@ -129,11 +131,12 @@ module "compute_vm" {
   vm_os_publisher     = "Canonical"
   vm_os_offer         = "0001-com-ubuntu-server-jammy"
   vm_os_sku           = "22_04-lts"
-  vnet_subnet_id      = module.vnet.vnet_subnets[3] # pe-subnet (index 3)
+  vnet_subnet_id      = module.vnet.vnet_subnets_name_id["aks-subnet"]
   admin_username      = "azureuser"
   admin_password      = var.vm_admin_password
   vm_size             = var.vm_size
   enable_ssh_key      = false
+  nb_public_ip        = 0
 }
 
 # --- Role Assignments ---
@@ -164,10 +167,11 @@ resource "azurerm_monitor_workspace" "prometheus" {
 }
 
 resource "azurerm_dashboard_grafana" "grafana" {
-  name                = "nutriai-grafana"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-  sku                 = "Standard"
+  name                  = "nutriai-grafana"
+  resource_group_name   = azurerm_resource_group.rg.name
+  location              = azurerm_resource_group.rg.location
+  sku                   = "Standard"
+  grafana_major_version = 12
   identity {
     type = "SystemAssigned"
   }
@@ -255,7 +259,7 @@ resource "azurerm_bastion_host" "bastion" {
 
   ip_configuration {
     name                 = "bastion-ip-config"
-    subnet_id            = module.vnet.vnet_subnets[4] # AzureBastionSubnet (index 4)
+    subnet_id            = module.vnet.vnet_subnets_name_id["AzureBastionSubnet"]
     public_ip_address_id = azurerm_public_ip.bastion_pip.id
   }
 }
