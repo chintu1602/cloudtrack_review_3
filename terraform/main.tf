@@ -10,6 +10,7 @@ module "vnet" {
   resource_group_name = azurerm_resource_group.rg.name
   vnet_location       = azurerm_resource_group.rg.location
   vnet_name           = "nutriai-vnet"
+  use_for_each        = true
   address_space       = [var.vnet_cidr]
   
   subnet_names        = ["aks-subnet", "appgw-subnet", "db-subnet", "pe-subnet", "AzureBastionSubnet"]
@@ -92,7 +93,6 @@ module "aks" {
   resource_group_name              = azurerm_resource_group.rg.name
   location                         = azurerm_resource_group.rg.location
   cluster_name                     = var.aks_cluster_name
-  dns_prefix                       = "nutriaiaksdns"
   prefix                           = "nutriai"
   vnet_subnet_id                   = module.vnet.vnet_subnets[0] # aks-subnet (index 0)
   os_disk_size_gb                  = 50
@@ -108,9 +108,10 @@ module "aks" {
   key_vault_secrets_provider_enabled = true
 
   # Enable Application Gateway Ingress Controller (AGIC)
-  ingress_application_gateway_enabled   = true
-  ingress_application_gateway_name      = "ingress-appgw"
-  ingress_application_gateway_subnet_id = module.vnet.vnet_subnets[1] # appgw-subnet (index 1)
+  ingress_application_gateway = {
+    name      = "ingress-appgw"
+    subnet_id = module.vnet.vnet_subnets[1] # appgw-subnet (index 1)
+  }
 
   # Enable Prometheus metrics scraping
   monitor_metrics = {
