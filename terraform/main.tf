@@ -24,15 +24,12 @@ module "vnet" {
 
   # Delegated Subnet setup for PostgreSQL Flexible Server
   subnet_delegation = {
-    db-subnet = [
-      {
-        name = "postgres-delegation"
-        service_delegation = {
-          name    = "Microsoft.DBforPostgreSQL/flexibleServers"
-          actions = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
-        }
+    db-subnet = {
+      postgres-delegation = {
+        service_name    = "Microsoft.DBforPostgreSQL/flexibleServers"
+        service_actions = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
       }
-    ]
+    }
   }
 }
 
@@ -172,7 +169,7 @@ resource "azurerm_dashboard_grafana" "grafana" {
     type = "SystemAssigned"
   }
   azure_monitor_workspace_integrations {
-    monitor_workspace_id = azurerm_monitor_workspace.prometheus.id
+    resource_id = azurerm_monitor_workspace.prometheus.id
   }
 }
 
