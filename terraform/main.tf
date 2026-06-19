@@ -108,7 +108,7 @@ module "aks" {
   key_vault_secrets_provider_enabled = true
 
   # Enable Application Gateway Ingress Controller (AGIC)
-  ingress_application_gateway = {
+  green_field_application_gateway_for_ingress = {
     name      = "ingress-appgw"
     subnet_id = module.vnet.vnet_subnets[1] # appgw-subnet (index 1)
   }
