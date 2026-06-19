@@ -19,16 +19,13 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: nutriai_acr/frontend:latest
+          image: nutriaiacr1602.azurecr.io/frontend:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 80
           env:
             - name: BACKEND_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: nutriai-config
-                  key: BACKEND_URL
+              value: "http://api-gateway:8000"
           resources:
             requests:
               memory: "128Mi"

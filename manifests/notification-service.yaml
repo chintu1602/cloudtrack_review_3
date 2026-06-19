@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: notification-service
-          image: nutriai_acr/notification-service:latest
+          image: nutriaiacr1602.azurecr.io/notification-service:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8005
@@ -27,53 +27,39 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: nutriai-secrets
+                  name: notification-service-secrets
                   key: DATABASE_URL
             - name: AZURE_SERVICE_BUS_CONNECTION_STRING
               valueFrom:
                 secretKeyRef:
-                  name: nutriai-secrets
+                  name: notification-service-secrets
                   key: AZURE_SERVICE_BUS_CONNECTION_STRING
             - name: AZURE_SERVICE_BUS_TOPIC_NAME
-              valueFrom:
-                configMapKeyRef:
-                  name: nutriai-config
-                  key: AZURE_SERVICE_BUS_TOPIC_NAME
+              value: "meal-reminders"
             - name: AZURE_SERVICE_BUS_SUBSCRIPTION_NAME
-              valueFrom:
-                configMapKeyRef:
-                  name: nutriai-config
-                  key: AZURE_SERVICE_BUS_SUBSCRIPTION_NAME
+              value: "email-sender"
             - name: SMTP_HOST
-              valueFrom:
-                configMapKeyRef:
-                  name: nutriai-config
-                  key: SMTP_HOST
+              value: "smtp.gmail.com"
             - name: SMTP_PORT
-              valueFrom:
-                configMapKeyRef:
-                  name: nutriai-config
-                  key: SMTP_PORT
+              value: "587"
             - name: SMTP_FROM_EMAIL
-              valueFrom:
-                configMapKeyRef:
-                  name: nutriai-config
-                  key: SMTP_FROM_EMAIL
+              value: "noreply@nutriai-health.com"
             - name: SMTP_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: nutriai-secrets
+                  name: notification-service-secrets
                   key: SMTP_USERNAME
             - name: SMTP_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: nutriai-secrets
+                  name: notification-service-secrets
                   key: SMTP_PASSWORD
             - name: APP_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: nutriai-config
-                  key: APP_URL
+              value: "https://nutriai.example.com"
+          volumeMounts:
+            - name: secrets-store-inline
+              mountPath: "/mnt/secrets-store"
+              readOnly: true
           resources:
             requests:
               memory: "128Mi"
@@ -93,6 +79,13 @@ spec:
               port: 8005
             initialDelaySeconds: 10
             periodSeconds: 10
+      volumes:
+        - name: secrets-store-inline
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: "notification-service-secret-provider"
 ---
 apiVersion: v1
 kind: Service

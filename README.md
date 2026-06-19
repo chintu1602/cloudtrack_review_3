@@ -112,24 +112,29 @@ Ingress [label: "AGIC Ingress Controller", icon: tencent-cloud, color: purple]
 // Gateways
 ApiGateway [label: "API Gateway (Port 8000)", icon: gateway, color: purple]
 
-// Microservices Group
-group Microservices {
-  AuthService [label: "Auth Service (Port 8001)", icon: lock, color: green]
-  DocumentService [label: "Document Service (Port 8002)", icon: document, color: green]
-  DietService [label: "Diet Service (Port 8003)", icon: list, color: green]
-  HealthService [label: "Health Service (Port 8004)", icon: heart, color: green]
-  NotificationService [label: "Notification Service (Port 8005)", icon: mail, color: green]
-  ProfileService [label: "Profile Service (Port 8006)", icon: user, color: green]
-  AdminService [label: "Admin Service (Port 8007)", icon: settings, color: green]
+// Databases Group (Infrastructure)
+group Infrastructure {
+  Redis [label: "Redis Cache (Port 6379)", icon: database, color: orange]
+  Postgres [label: "PostgreSQL (Port 5432)", icon: database, color: orange]
 }
 
-// Databases Group
-group Infrastructure {
-  Postgres [label: "PostgreSQL (Port 5432)", icon: database, color: orange]
-  Redis [label: "Redis Cache (Port 6379)", icon: database, color: orange]
+// Microservices Group
+// Ordered logically from top to bottom to optimize layout and prevent crossed lines:
+// - Top services connect exclusively to PostgreSQL / Redis
+// - Middle service (Document) connects to file/OCR cloud storage
+// - Bottom services (Diet, Notification) connect to AI, Service Bus, and SMTP
+group Microservices {
+  AuthService [label: "Auth Service (Port 8001)", icon: lock, color: green]
+  ProfileService [label: "Profile Service (Port 8006)", icon: user, color: green]
+  HealthService [label: "Health Service (Port 8004)", icon: heart, color: green]
+  AdminService [label: "Admin Service (Port 8007)", icon: settings, color: green]
+  DocumentService [label: "Document Service (Port 8002)", icon: document, color: green]
+  DietService [label: "Diet Service (Port 8003)", icon: list, color: green]
+  NotificationService [label: "Notification Service (Port 8005)", icon: mail, color: green]
 }
 
 // External Cloud Services Group
+// Aligned vertically to match the microservices on their left
 group AzureCloudServices {
   BlobStorage [label: "Azure Blob Storage", icon: folder, color: light-blue]
   DocIntelligence [label: "Azure Document Intelligence", icon: cpu, color: light-blue]
@@ -137,7 +142,7 @@ group AzureCloudServices {
   ServiceBus [label: "Azure Service Bus (Topic)", icon: send, color: light-blue]
 }
 
-// SMTP Relay
+// SMTP Relay (Placed at the bottom for the email delivery loop)
 SmtpServer [label: "SMTP Server", icon: mail, color: gray]
 
 // Architecture Connections
@@ -145,22 +150,22 @@ User > Ingress: "Access UI / Send Requests"
 Ingress > Frontend: "Route UI requests (/)"
 Ingress > ApiGateway: "Route API requests (/api/*, /admin/*)"
 
-// Gateway Routing
+// Gateway Routing & Cache Connection
+ApiGateway > Redis: "Cache JWT Sessions"
 ApiGateway > AuthService: "Auth Actions (/auth)"
+ApiGateway > ProfileService: "Patient Profile (/profile)"
+ApiGateway > HealthService: "Log Vitals (/health-tracker)"
+ApiGateway > AdminService: "Platform Audit (/admin)"
 ApiGateway > DocumentService: "Upload Docs (/documents)"
 ApiGateway > DietService: "Diet Planner (/diet-plan)"
-ApiGateway > HealthService: "Log Vitals (/health-tracker)"
-ApiGateway > ProfileService: "Patient Profile (/profile)"
-ApiGateway > AdminService: "Platform Audit (/admin)"
 
 // DB Integrations
 AuthService > Postgres: "Read/Write Users"
+ProfileService > Postgres: "Update Profile"
+HealthService > Postgres: "Store Vitals"
+AdminService > Postgres: "Audit Logs"
 DocumentService > Postgres: "Save Metrics"
 DietService > Postgres: "Read Vitals/Write Plans"
-HealthService > Postgres: "Store Vitals"
-ProfileService > Postgres: "Update Profile"
-AdminService > Postgres: "Audit Logs"
-ApiGateway > Redis: "Cache JWT Sessions"
 
 // Cloud Services Integrations
 DocumentService > BlobStorage: "1. Upload PDF"
@@ -168,7 +173,7 @@ DocumentService > DocIntelligence: "2. Analyze Document"
 DietService > OpenAI: "1. Generate Diet Plan via AI"
 DietService > ServiceBus: "2. Publish Meal Reminders"
 
-// Message Consumer
+// Message Consumer & Email Relay Loop
 ServiceBus > NotificationService: "3. Pull Reminders (Asynchronous)"
 NotificationService > SmtpServer: "4. Relay Email Alerts"
 SmtpServer > User: "5. Deliver Meal Reminder"

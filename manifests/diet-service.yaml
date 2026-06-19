@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: diet-service
-          image: nutriai_acr/diet-service:latest
+          image: nutriaiacr1602.azurecr.io/diet-service:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8003
@@ -27,38 +27,33 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: nutriai-secrets
+                  name: diet-service-secrets
                   key: DATABASE_URL
             - name: AZURE_OPENAI_ENDPOINT
               valueFrom:
                 secretKeyRef:
-                  name: nutriai-secrets
+                  name: diet-service-secrets
                   key: AZURE_OPENAI_ENDPOINT
             - name: AZURE_OPENAI_KEY
               valueFrom:
                 secretKeyRef:
-                  name: nutriai-secrets
+                  name: diet-service-secrets
                   key: AZURE_OPENAI_KEY
             - name: AZURE_OPENAI_DEPLOYMENT_NAME
-              valueFrom:
-                configMapKeyRef:
-                  name: nutriai-config
-                  key: AZURE_OPENAI_DEPLOYMENT_NAME
+              value: "gpt-4"
             - name: AZURE_OPENAI_API_VERSION
-              valueFrom:
-                configMapKeyRef:
-                  name: nutriai-config
-                  key: AZURE_OPENAI_API_VERSION
+              value: "2024-02-01"
             - name: AZURE_SERVICE_BUS_CONNECTION_STRING
               valueFrom:
                 secretKeyRef:
-                  name: nutriai-secrets
+                  name: diet-service-secrets
                   key: AZURE_SERVICE_BUS_CONNECTION_STRING
             - name: AZURE_SERVICE_BUS_TOPIC_NAME
-              valueFrom:
-                configMapKeyRef:
-                  name: nutriai-config
-                  key: AZURE_SERVICE_BUS_TOPIC_NAME
+              value: "meal-reminders"
+          volumeMounts:
+            - name: secrets-store-inline
+              mountPath: "/mnt/secrets-store"
+              readOnly: true
           resources:
             requests:
               memory: "256Mi"
@@ -78,6 +73,13 @@ spec:
               port: 8003
             initialDelaySeconds: 10
             periodSeconds: 10
+      volumes:
+        - name: secrets-store-inline
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: "diet-service-secret-provider"
 ---
 apiVersion: v1
 kind: Service
