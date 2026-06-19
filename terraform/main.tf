@@ -104,6 +104,9 @@ module "aks" {
   # Enable Azure Key Vault Secrets Store CSI Driver add-on
   key_vault_secrets_provider_enabled = true
 
+  # Enable Role-Based Access Control (RBAC) required for Entra/AAD integration
+  role_based_access_control_enabled = true
+
   # Enable Application Gateway Ingress Controller (AGIC)
   green_field_application_gateway_for_ingress = {
     name      = "ingress-appgw"
