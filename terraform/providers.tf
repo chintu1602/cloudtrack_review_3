@@ -16,7 +16,7 @@ terraform {
   }
 
   backend "azurerm" {
-    resource_group_name  = "nutriai-rg"
+    resource_group_name  = "mystate-rg"
     storage_account_name = "nutriaisttfstate"
     container_name       = "tfstate"
     key                  = "terraform.tfstate"
