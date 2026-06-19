@@ -115,8 +115,8 @@ module "aks" {
 
   # Enable Prometheus metrics scraping
   monitor_metrics = {
-    annotations_allowed = ""
-    labels_allowed      = ""
+    annotations_allowed = null
+    labels_allowed      = null
   }
 }
 
