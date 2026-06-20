@@ -94,7 +94,7 @@ module "aks" {
   prefix                           = "nutriai"
   vnet_subnet_id                   = module.vnet.vnet_subnets_name_id["aks-subnet"]
   os_disk_size_gb                  = 30
-  agents_size                      = "Standard_D2s_v3"
+  agents_size                      = "Standard_D2ls_v5"
   agents_count                     = 1
 
   # Attach ACR so AKS kubelet gets AcrPull role automatically
@@ -244,13 +244,13 @@ JSON
 resource "azurerm_role_assignment" "grafana_monitoring_reader" {
   scope                = azurerm_resource_group.rg.id
   role_definition_name = "Monitoring Reader"
-  principal_id         = jsondecode(azurerm_resource_group_template_deployment.grafana.output_content).principalId.value
+  principal_id         = try(jsondecode(azurerm_resource_group_template_deployment.grafana.output_content).principalId.value, "00000000-0000-0000-0000-000000000000")
 }
 
 resource "azurerm_role_assignment" "grafana_metrics_reader" {
   scope                = azurerm_monitor_workspace.prometheus.id
   role_definition_name = "Monitoring Data Reader"
-  principal_id         = jsondecode(azurerm_resource_group_template_deployment.grafana.output_content).principalId.value
+  principal_id         = try(jsondecode(azurerm_resource_group_template_deployment.grafana.output_content).principalId.value, "00000000-0000-0000-0000-000000000000")
 }
 
 

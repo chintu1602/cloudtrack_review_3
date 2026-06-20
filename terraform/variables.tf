@@ -51,7 +51,7 @@ variable "vm_admin_password" {
 variable "vm_size" {
   type        = string
   description = "Virtual machine size for build/docker host"
-  default     = "Standard_D2s_v3"
+  default     = "Standard_D2ls_v5"
 }
 
 variable "keyvault_name" {
