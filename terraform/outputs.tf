@@ -39,7 +39,7 @@ output "app_gateway_id" {
 }
 
 output "grafana_url" {
-  value       = jsondecode(azurerm_resource_group_template_deployment.grafana.output_content).endpoint.value
+  value       = try(jsondecode(azurerm_resource_group_template_deployment.grafana.output_content).endpoint.value, "")
   description = "The URL of the Azure Managed Grafana Dashboard"
 }
 
