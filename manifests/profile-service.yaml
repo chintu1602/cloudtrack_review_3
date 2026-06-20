@@ -16,7 +16,9 @@ spec:
     metadata:
       labels:
         app: profile-service
+        azure.workload.identity/use: "true"
     spec:
+      serviceAccountName: nutriai-service-account
       containers:
         - name: profile-service
           image: nutriaiacr1602.azurecr.io/profile-service:latest

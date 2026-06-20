@@ -99,6 +99,35 @@ export default function DietPlanGenerate() {
                   <div className="card-header-custom"><h5><i className="fas fa-check-circle text-success me-2"></i>{result.plan_title}</h5></div>
                   {result.plan_summary && <p className="text-muted mb-3">{result.plan_summary}</p>}
 
+                  {result.weekly_meal_plan && (
+                    <div className="mb-4">
+                      <h6 className="fw-bold text-secondary-blue mb-3"><i className="fas fa-calendar-week me-2"></i>Weekly Meal Plan</h6>
+                      <div className="accordion meal-plan-accordion" id="mealPlanAccordion">
+                        {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map((day, index) => {
+                          const dayPlan = result.weekly_meal_plan[day];
+                          if (!dayPlan) return null;
+                          return (
+                            <div className="accordion-item" key={day}>
+                              <h2 className="accordion-header">
+                                <button className={`accordion-button ${index !== 0 ? 'collapsed' : ''}`} type="button" data-bs-toggle="collapse" data-bs-target={`#day-${day}`}>
+                                  <i className="fas fa-calendar-day me-2"></i>{day.charAt(0).toUpperCase() + day.slice(1)}
+                                </button>
+                              </h2>
+                              <div id={`day-${day}`} className={`accordion-collapse collapse ${index === 0 ? 'show' : ''}`} data-bs-parent="#mealPlanAccordion">
+                                <div className="accordion-body">
+                                  <p className="mb-2"><strong>🌅 Breakfast:</strong> {dayPlan.breakfast || ''}</p>
+                                  <p className="mb-2"><strong>☀️ Lunch:</strong> {dayPlan.lunch || ''}</p>
+                                  <p className="mb-2"><strong>🌙 Dinner:</strong> {dayPlan.dinner || ''}</p>
+                                  <p className="mb-0"><strong>🍎 Snacks:</strong> {dayPlan.snacks || ''}</p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {result.foods_to_eat?.length > 0 && (
                     <div className="mb-4">
                       <h6 className="fw-bold text-success"><i className="fas fa-check me-2"></i>Foods to Eat</h6>

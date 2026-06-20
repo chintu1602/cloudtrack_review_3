@@ -16,7 +16,9 @@ spec:
     metadata:
       labels:
         app: admin-service
+        azure.workload.identity/use: "true"
     spec:
+      serviceAccountName: nutriai-service-account
       containers:
         - name: admin-service
           image: nutriaiacr1602.azurecr.io/admin-service:latest

@@ -27,9 +27,14 @@ class GenerateRequest(BaseModel):
 @router.get("/documents")
 async def list_completed_documents(request: Request, db: Session = Depends(get_db)):
     """Get completed documents for diet plan generation."""
-    user_id = request.headers.get("X-User-ID")
-    if not user_id:
+    user_id_str = request.headers.get("X-User-ID")
+    if not user_id_str:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    import uuid
+    try:
+        user_id = uuid.UUID(user_id_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
 
     documents = (
         db.query(Document)
@@ -64,9 +69,14 @@ async def list_completed_documents(request: Request, db: Session = Depends(get_d
 
 @router.post("/generate")
 async def generate_plan(payload: GenerateRequest, request: Request, db: Session = Depends(get_db)):
-    user_id = request.headers.get("X-User-ID")
-    if not user_id:
+    user_id_str = request.headers.get("X-User-ID")
+    if not user_id_str:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    import uuid
+    try:
+        user_id = uuid.UUID(user_id_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
 
     if not payload.document_ids:
         return JSONResponse(status_code=400, content={"error": "Please select at least one document."})
@@ -105,9 +115,14 @@ async def generate_plan(payload: GenerateRequest, request: Request, db: Session 
 
 @router.get("/history")
 async def history(request: Request, db: Session = Depends(get_db)):
-    user_id = request.headers.get("X-User-ID")
-    if not user_id:
+    user_id_str = request.headers.get("X-User-ID")
+    if not user_id_str:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    import uuid
+    try:
+        user_id = uuid.UUID(user_id_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
 
     plans = get_diet_plans(db, user_id)
     return [
@@ -126,11 +141,20 @@ async def history(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/{plan_id}")
 async def plan_detail(plan_id: str, request: Request, db: Session = Depends(get_db)):
-    user_id = request.headers.get("X-User-ID")
-    if not user_id:
+    user_id_str = request.headers.get("X-User-ID")
+    if not user_id_str:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    import uuid
+    try:
+        user_id = uuid.UUID(user_id_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
+    try:
+        plan_uuid = uuid.UUID(plan_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid plan ID format")
 
-    plan = get_diet_plan_detail(db, plan_id, user_id)
+    plan = get_diet_plan_detail(db, plan_uuid, user_id)
     if not plan:
         raise HTTPException(status_code=404, detail="Diet plan not found.")
 
@@ -152,11 +176,20 @@ async def plan_detail(plan_id: str, request: Request, db: Session = Depends(get_
 
 @router.get("/{plan_id}/pdf")
 async def download_pdf(plan_id: str, request: Request, db: Session = Depends(get_db)):
-    user_id = request.headers.get("X-User-ID")
-    if not user_id:
+    user_id_str = request.headers.get("X-User-ID")
+    if not user_id_str:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    import uuid
+    try:
+        user_id = uuid.UUID(user_id_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
+    try:
+        plan_uuid = uuid.UUID(plan_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid plan ID format")
 
-    plan = get_diet_plan_detail(db, plan_id, user_id)
+    plan = get_diet_plan_detail(db, plan_uuid, user_id)
     if not plan:
         raise HTTPException(status_code=404, detail="Diet plan not found.")
 

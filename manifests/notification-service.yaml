@@ -16,7 +16,9 @@ spec:
     metadata:
       labels:
         app: notification-service
+        azure.workload.identity/use: "true"
     spec:
+      serviceAccountName: nutriai-service-account
       containers:
         - name: notification-service
           image: nutriaiacr1602.azurecr.io/notification-service:latest

@@ -322,7 +322,7 @@ def generate_diet_plan_ai(
 # Service Bus - Meal Reminder Publishing
 # ============================================================
 
-def publish_meal_reminders(diet_plan: DietPlan, user_email: str):
+def publish_meal_reminders(diet_plan: DietPlan, user_email: str, is_first_plan: bool = False):
     """
     Publish 28 messages (7 days × 4 meals) to Service Bus topic
     with scheduled_enqueue_time at actual meal times.
@@ -410,7 +410,7 @@ def publish_meal_reminders(diet_plan: DietPlan, user_email: str):
                         messages_sent += 1
 
                 # Send an immediate Welcome reminder to verify SMTP configuration in real time
-                if user_email:
+                if user_email and is_first_plan:
                     welcome_body = json.dumps({
                         "user_id": str(diet_plan.user_id),
                         "user_email": user_email,
@@ -447,10 +447,18 @@ def create_diet_plan(
     additional_notes: Optional[str] = None,
 ) -> Optional[DietPlan]:
     try:
+        import uuid
+        if isinstance(user_id, str):
+            user_id = uuid.UUID(user_id)
+
         # Fetch documents
         documents = []
         combined_ocr = ""
-        for doc_id in document_ids:
+        for doc_id_str in document_ids:
+            try:
+                doc_id = uuid.UUID(doc_id_str) if isinstance(doc_id_str, str) else doc_id_str
+            except ValueError:
+                continue
             doc = db.query(Document).filter(
                 Document.id == doc_id,
                 Document.user_id == user_id,
@@ -508,10 +516,13 @@ def create_diet_plan(
         db.commit()
         db.refresh(diet_plan)
 
+        # Check if this is the first diet plan generated for the user
+        is_first_plan = db.query(DietPlan).filter(DietPlan.user_id == user_id).count() == 1
+
         # Publish meal reminders to Service Bus
         user = db.query(User).filter(User.id == user_id).first()
         user_email = user.email if user else ""
-        publish_meal_reminders(diet_plan, user_email)
+        publish_meal_reminders(diet_plan, user_email, is_first_plan=is_first_plan)
 
         logger.info(f"Diet plan created: {diet_plan.id}")
         return diet_plan
@@ -523,6 +534,9 @@ def create_diet_plan(
 
 
 def get_diet_plans(db: Session, user_id: str) -> List[DietPlan]:
+    import uuid
+    if isinstance(user_id, str):
+        user_id = uuid.UUID(user_id)
     return (
         db.query(DietPlan)
         .filter(DietPlan.user_id == user_id)
@@ -532,6 +546,11 @@ def get_diet_plans(db: Session, user_id: str) -> List[DietPlan]:
 
 
 def get_diet_plan_detail(db: Session, plan_id: str, user_id: str) -> Optional[DietPlan]:
+    import uuid
+    if isinstance(user_id, str):
+        user_id = uuid.UUID(user_id)
+    if isinstance(plan_id, str):
+        plan_id = uuid.UUID(plan_id)
     return (
         db.query(DietPlan)
         .filter(DietPlan.id == plan_id, DietPlan.user_id == user_id)
@@ -604,6 +623,38 @@ def generate_diet_plan_pdf(plan: DietPlan) -> bytes:
         elements.append(Paragraph(plan.plan_summary, body_style))
         elements.append(Spacer(1, 10))
 
+    # 3. Weekly Meal Plan Table
+    if plan.weekly_meal_plan:
+        elements.append(Paragraph("📅 Weekly Meal Plan", heading_style))
+        days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+        table_data = []
+        for day in days:
+            day_plan = plan.weekly_meal_plan.get(day, {})
+            if day_plan:
+                meals_paragraphs = []
+                for meal_type in ["breakfast", "lunch", "dinner", "snacks"]:
+                     meal = day_plan.get(meal_type, "")
+                     if meal:
+                         meals_paragraphs.append(f"<b>{meal_type.capitalize()}:</b> {meal}")
+                meals_html = "<br/>".join(meals_paragraphs)
+                table_data.append([
+                    Paragraph(f"<b>{day.capitalize()}</b>", table_cell_style),
+                    Paragraph(meals_html, table_cell_style)
+                ])
+        if table_data:
+            table = Table(table_data, colWidths=[1.2 * inch, 5.8 * inch])
+            table.setStyle(TableStyle([
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+                ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.HexColor("#F8FAFC"), colors.white]),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ]))
+            elements.append(table)
+            elements.append(Spacer(1, 10))
+
     # 1. Foods to Eat Table
     if plan.foods_to_eat:
         elements.append(Paragraph("✅ Foods to Eat", heading_style))
@@ -663,38 +714,6 @@ def generate_diet_plan_pdf(plan: DietPlan) -> bytes:
         ]))
         elements.append(table)
         elements.append(Spacer(1, 10))
-
-    # 3. Weekly Meal Plan Table
-    if plan.weekly_meal_plan:
-        elements.append(Paragraph("📅 Weekly Meal Plan", heading_style))
-        days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-        table_data = []
-        for day in days:
-            day_plan = plan.weekly_meal_plan.get(day, {})
-            if day_plan:
-                meals_paragraphs = []
-                for meal_type in ["breakfast", "lunch", "dinner", "snacks"]:
-                    meal = day_plan.get(meal_type, "")
-                    if meal:
-                        meals_paragraphs.append(f"<b>{meal_type.capitalize()}:</b> {meal}")
-                meals_html = "<br/>".join(meals_paragraphs)
-                table_data.append([
-                    Paragraph(f"<b>{day.capitalize()}</b>", table_cell_style),
-                    Paragraph(meals_html, table_cell_style)
-                ])
-        if table_data:
-            table = Table(table_data, colWidths=[1.2 * inch, 5.8 * inch])
-            table.setStyle(TableStyle([
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
-                ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.HexColor("#F8FAFC"), colors.white]),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("TOPPADDING", (0, 0), (-1, -1), 6),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-                ("LEFTPADDING", (0, 0), (-1, -1), 8),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-            ]))
-            elements.append(table)
-            elements.append(Spacer(1, 10))
 
     # 4. Nutritional Guidelines Dashboard
     if plan.nutritional_guidelines:

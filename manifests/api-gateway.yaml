@@ -16,7 +16,9 @@ spec:
     metadata:
       labels:
         app: api-gateway
+        azure.workload.identity/use: "true"
     spec:
+      serviceAccountName: nutriai-service-account
       containers:
         - name: api-gateway
           image: nutriaiacr1602.azurecr.io/api-gateway:latest

@@ -296,6 +296,32 @@ function displayDietPlan(data) {
     }
     html += '</div>';
 
+    // Weekly Meal Plan
+    if (data.weekly_meal_plan) {
+        html += '<div class="content-card diet-result-card mb-4">';
+        html += '<h5 class="text-secondary-blue mb-3"><i class="fas fa-calendar-week me-2"></i>Weekly Meal Plan</h5>';
+        html += '<div class="accordion meal-plan-accordion" id="mealPlanAccordion">';
+        var days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        days.forEach(function (day, index) {
+            var dayPlan = data.weekly_meal_plan[day];
+            if (dayPlan) {
+                var isFirst = index === 0;
+                html += '<div class="accordion-item">';
+                html += '<h2 class="accordion-header"><button class="accordion-button ' + (isFirst ? '' : 'collapsed') + '" type="button" data-bs-toggle="collapse" data-bs-target="#day-' + day + '">';
+                html += '<i class="fas fa-calendar-day me-2"></i>' + day.charAt(0).toUpperCase() + day.slice(1);
+                html += '</button></h2>';
+                html += '<div id="day-' + day + '" class="accordion-collapse collapse ' + (isFirst ? 'show' : '') + '" data-bs-parent="#mealPlanAccordion">';
+                html += '<div class="accordion-body">';
+                html += '<p><strong>🌅 Breakfast:</strong> ' + escapeHtml(dayPlan.breakfast || '') + '</p>';
+                html += '<p><strong>☀️ Lunch:</strong> ' + escapeHtml(dayPlan.lunch || '') + '</p>';
+                html += '<p><strong>🌙 Dinner:</strong> ' + escapeHtml(dayPlan.dinner || '') + '</p>';
+                html += '<p><strong>🍎 Snacks:</strong> ' + escapeHtml(dayPlan.snacks || '') + '</p>';
+                html += '</div></div></div>';
+            }
+        });
+        html += '</div></div>';
+    }
+
     // Foods to Eat
     if (data.foods_to_eat && data.foods_to_eat.length > 0) {
         html += '<div class="content-card foods-eat-card diet-result-card mb-4">';
@@ -328,32 +354,6 @@ function displayDietPlan(data) {
             html += '</tr>';
         });
         html += '</tbody></table></div></div>';
-    }
-
-    // Weekly Meal Plan
-    if (data.weekly_meal_plan) {
-        html += '<div class="content-card diet-result-card mb-4">';
-        html += '<h5 class="text-secondary-blue mb-3"><i class="fas fa-calendar-week me-2"></i>Weekly Meal Plan</h5>';
-        html += '<div class="accordion meal-plan-accordion" id="mealPlanAccordion">';
-        var days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-        days.forEach(function (day, index) {
-            var dayPlan = data.weekly_meal_plan[day];
-            if (dayPlan) {
-                var isFirst = index === 0;
-                html += '<div class="accordion-item">';
-                html += '<h2 class="accordion-header"><button class="accordion-button ' + (isFirst ? '' : 'collapsed') + '" type="button" data-bs-toggle="collapse" data-bs-target="#day-' + day + '">';
-                html += '<i class="fas fa-calendar-day me-2"></i>' + day.charAt(0).toUpperCase() + day.slice(1);
-                html += '</button></h2>';
-                html += '<div id="day-' + day + '" class="accordion-collapse collapse ' + (isFirst ? 'show' : '') + '" data-bs-parent="#mealPlanAccordion">';
-                html += '<div class="accordion-body">';
-                html += '<p><strong>🌅 Breakfast:</strong> ' + escapeHtml(dayPlan.breakfast || '') + '</p>';
-                html += '<p><strong>☀️ Lunch:</strong> ' + escapeHtml(dayPlan.lunch || '') + '</p>';
-                html += '<p><strong>🌙 Dinner:</strong> ' + escapeHtml(dayPlan.dinner || '') + '</p>';
-                html += '<p><strong>🍎 Snacks:</strong> ' + escapeHtml(dayPlan.snacks || '') + '</p>';
-                html += '</div></div></div>';
-            }
-        });
-        html += '</div></div>';
     }
 
     // Nutritional Guidelines

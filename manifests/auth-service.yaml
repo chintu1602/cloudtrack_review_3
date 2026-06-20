@@ -16,7 +16,9 @@ spec:
     metadata:
       labels:
         app: auth-service
+        azure.workload.identity/use: "true"
     spec:
+      serviceAccountName: nutriai-service-account
       containers:
         - name: auth-service
           image: nutriaiacr1602.azurecr.io/auth-service:latest

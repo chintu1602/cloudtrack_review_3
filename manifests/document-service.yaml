@@ -16,7 +16,9 @@ spec:
     metadata:
       labels:
         app: document-service
+        azure.workload.identity/use: "true"
     spec:
+      serviceAccountName: nutriai-service-account
       containers:
         - name: document-service
           image: nutriaiacr1602.azurecr.io/document-service:latest

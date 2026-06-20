@@ -16,7 +16,9 @@ spec:
     metadata:
       labels:
         app: health-service
+        azure.workload.identity/use: "true"
     spec:
+      serviceAccountName: nutriai-service-account
       containers:
         - name: health-service
           image: nutriaiacr1602.azurecr.io/health-service:latest

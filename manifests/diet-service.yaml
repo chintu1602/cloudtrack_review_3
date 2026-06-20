@@ -16,7 +16,9 @@ spec:
     metadata:
       labels:
         app: diet-service
+        azure.workload.identity/use: "true"
     spec:
+      serviceAccountName: nutriai-service-account
       containers:
         - name: diet-service
           image: nutriaiacr1602.azurecr.io/diet-service:latest

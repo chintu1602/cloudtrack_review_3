@@ -1,38 +1,43 @@
 """
-NutriAI Health Portal - Diet Plan Tests
-Tests for diet plan generation, history, and detail views.
+NutriAI Diet Service - Comprehensive Tests
 """
 
 import uuid
-import json
 import pytest
 from datetime import datetime
 from unittest.mock import patch, MagicMock
 
-from app.models.document import Document
-from app.models.diet_plan import DietPlan
-from app.models.user import FoodAllergy
+from models import Document, DietPlan, FoodAllergy
+
+def test_health_endpoint(client):
+    """Health check endpoint should return 200 and diet service identification."""
+    response = client.get("/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["service"] == "diet-service"
 
 
-class TestDietPlanPage:
-    """Tests for the diet plan generator page."""
+class TestDietPlanDocuments:
+    """Tests for fetching documents/allergies needed for diet planning."""
 
-    def test_diet_plan_page_renders(self, authenticated_client):
-        """Diet plan page should render for authenticated users."""
-        response = authenticated_client.get("/diet-plan")
+    def test_documents_endpoint_renders(self, authenticated_client):
+        """Documents endpoint should return 200 for authenticated users."""
+        response = authenticated_client.get("/diet-plan/documents")
         assert response.status_code == 200
+        assert "documents" in response.json()
+        assert "allergies" in response.json()
 
-    def test_diet_plan_page_requires_auth(self, client):
-        """Diet plan page should redirect unauthenticated users."""
-        response = client.get("/diet-plan", follow_redirects=False)
-        assert response.status_code == 302
+    def test_documents_endpoint_requires_auth(self, client):
+        """Documents endpoint should return 401 for unauthenticated users."""
+        response = client.get("/diet-plan/documents")
+        assert response.status_code == 401
 
 
 class TestDietPlanHistory:
-    """Tests for the diet plan history page."""
+    """Tests for the diet plan history."""
 
-    def test_history_page_renders(self, authenticated_client):
-        """History page should render for authenticated users."""
+    def test_history_endpoint_renders(self, authenticated_client):
+        """History should return 200 for authenticated users."""
         response = authenticated_client.get("/diet-plan/history")
         assert response.status_code == 200
 
@@ -44,13 +49,13 @@ class TestDietPlanHistory:
             document_ids=[str(uuid.uuid4())],
             plan_title="Test Diet Plan",
             plan_summary="A test diet plan for unit testing",
-            foods_to_eat=[{"food_name": "Vegetables"}, {"food_name": "Lean protein"}, {"food_name": "Whole grains"}],
-            foods_to_avoid=[{"food_name": "Processed sugar"}, {"food_name": "Fried foods"}],
+            foods_to_eat=[{"food_name": "Vegetables"}, {"food_name": "Lean protein"}],
+            foods_to_avoid=[{"food_name": "Processed sugar"}],
             weekly_meal_plan={
                 "Monday": {"breakfast": "Oatmeal", "lunch": "Salad", "dinner": "Grilled chicken"},
             },
             nutritional_guidelines={"calories": 2000, "protein": "80g"},
-            allergy_notes=["Avoid peanuts due to severe allergy"],
+            allergy_notes=["Avoid peanuts"],
             generated_at=datetime.utcnow(),
             is_active=True,
         )
@@ -59,16 +64,17 @@ class TestDietPlanHistory:
 
         response = authenticated_client.get("/diet-plan/history")
         assert response.status_code == 200
-        assert "Test Diet Plan" in response.text
+        data = response.json()
+        assert len(data) > 0
+        assert data[0]["plan_title"] == "Test Diet Plan"
 
 
 class TestDietPlanGeneration:
     """Tests for AI diet plan generation."""
 
-    @patch("app.routers.diet_plans.create_diet_plan")
+    @patch("routes.create_diet_plan")
     def test_generate_diet_plan_success(self, mock_create, authenticated_client, db_session, test_user):
         """Generate should succeed with valid document selection."""
-        # Create a completed document
         doc_id = uuid.uuid4()
         doc = Document(
             id=doc_id,
@@ -78,13 +84,12 @@ class TestDietPlanGeneration:
             blob_name="lab-blob.pdf",
             blob_url="https://storage.blob.core.windows.net/lab-blob.pdf",
             ocr_status="completed",
-            ocr_content="Blood sugar: 95 mg/dL, Cholesterol: 180 mg/dL",
+            ocr_content="Blood sugar: 95 mg/dL",
             uploaded_at=datetime.utcnow(),
         )
         db_session.add(doc)
         db_session.commit()
 
-        # Mock the diet plan creation service
         mock_plan = MagicMock()
         mock_plan.id = uuid.uuid4()
         mock_plan.plan_title = "Generated Diet Plan"
@@ -99,26 +104,25 @@ class TestDietPlanGeneration:
 
         response = authenticated_client.post(
             "/diet-plan/generate",
-            data={
+            json={
                 "document_ids": [str(doc_id)],
                 "additional_notes": "I prefer vegetarian meals",
-            },
-            follow_redirects=False,
+            }
         )
-        assert response.status_code in [200, 302]
+        assert response.status_code == 200
+        assert response.json()["plan_title"] == "Generated Diet Plan"
 
     def test_generate_without_documents(self, authenticated_client):
-        """Generate should fail without selecting any documents."""
+        """Generate should return 400 without selecting any documents."""
         response = authenticated_client.post(
             "/diet-plan/generate",
-            data={
+            json={
                 "document_ids": [],
                 "additional_notes": "",
-            },
-            follow_redirects=False,
+            }
         )
-        # Should redirect back with error or return validation error
-        assert response.status_code in [200, 302, 422, 400]
+        assert response.status_code == 400
+        assert "error" in response.json()
 
 
 class TestDietPlanDetail:
@@ -146,7 +150,7 @@ class TestDietPlanDetail:
 
         response = authenticated_client.get(f"/diet-plan/{plan_id}")
         assert response.status_code == 200
-        assert "My Diet Plan" in response.text
+        assert response.json()["plan_title"] == "My Diet Plan"
 
     def test_view_nonexistent_plan(self, authenticated_client):
         """Viewing a non-existent plan should return 404."""
@@ -182,8 +186,8 @@ class TestDietPlanDetail:
 class TestAllergyAwareness:
     """Tests for allergy integration in diet planning."""
 
-    def test_allergies_shown_on_generate_page(self, authenticated_client, db_session, test_user):
-        """Generate page should display user's food allergies."""
+    def test_allergies_shown_on_documents_page(self, authenticated_client, db_session, test_user):
+        """Documents page should display user's food allergies."""
         allergy = FoodAllergy(
             id=uuid.uuid4(),
             user_id=test_user.id,
@@ -194,22 +198,25 @@ class TestAllergyAwareness:
         db_session.add(allergy)
         db_session.commit()
 
-        response = authenticated_client.get("/diet-plan")
+        response = authenticated_client.get("/diet-plan/documents")
         assert response.status_code == 200
-        assert "Peanuts" in response.text or "peanuts" in response.text
+        data = response.json()
+        assert len(data["allergies"]) > 0
+        assert data["allergies"][0]["allergen_name"] == "Peanuts"
 
 
 class TestDietPlanService:
     """Tests for the diet plan service layer."""
 
-    @patch("app.services.diet_plan_service.generate_diet_plan")
+    @patch("services.generate_diet_plan_ai")
     def test_create_diet_plan_includes_profile_data(self, mock_generate, db_session, test_user):
         """create_diet_plan should fetch and pass medical conditions and dietary preferences."""
-        from app.models.user import PatientProfile
-        from app.services.diet_plan_service import create_diet_plan
+        from models import PatientProfile
+        from services import create_diet_plan
 
         # Create patient profile
         profile = PatientProfile(
+            id=uuid.uuid4(),
             user_id=test_user.id,
             medical_conditions={"conditions": ["Diabetes", "Hypertension"], "other": "Gout"},
             dietary_preferences=["vegetarian"],
@@ -247,7 +254,7 @@ class TestDietPlanService:
         # Generate plan
         plan = create_diet_plan(
             db=db_session,
-            user=test_user,
+            user_id=str(test_user.id),
             document_ids=[str(doc_id)],
             additional_notes="None",
         )
